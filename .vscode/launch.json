@@ -1,0 +1,36 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "cwd": "${workspaceFolder}",
+            "armToolchainPath": "C:\\Program Files (x86)\\GNU Arm Embedded Toolchain\\10 2021.10\\bin",
+            "executable": "fallarrest/s112/armgcc/_build/nrf52810_xxaa.out",
+            "svdFile": "D:/Testing code/Sensor_MSB-main/nRF/nRF5SDK/modules/nrfx/mdk/nrf52.svd",
+            "name": "Debug NRF52810",
+            "device": "nRF52810_xxAA",
+            "request": "launch",
+            "type": "cortex-debug",
+            "interface": "swd",
+            "servertype": "jlink",
+            "runToMain": true,
+            "preLaunchTask": "flash"
+        },
+        {
+            "cwd": "${workspaceFolder}",
+            "armToolchainPath": "C:/Program Files (x86)/GNU Arm Embedded Toolchain/10 2021.10/bin/",
+            "executable": "fallarrest/s132/armgcc/_build/nrf52832_xxaa.out",
+            "svdFile": "D:/Testing code/Sensor_MSB-main/nRF/nRF5SDK/modules/nrfx/mdk/nrf52.svd",
+            "name": "Debug NRF52832",
+            "device": "nRF52832_xxAA",
+            "request": "launch",
+            "type": "cortex-debug",
+            "interface": "swd",
+            "servertype": "jlink",
+            "runToMain": true,
+            "preLaunchTask": "flash"
+        }
+    ]
+}

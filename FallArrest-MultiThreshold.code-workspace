@@ -1,0 +1,55 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"nrf_sdh.h": "c",
+			"lsm6ds3_reg.h": "c",
+			"nrfx.h": "c",
+			"nrfx_config.h": "c",
+			"sdk_config.h": "c",
+			"nrfx_common.h": "c",
+			"lsm6dsl.h": "c",
+			"ble_conn_params.h": "c",
+			"nrf_drv_saadc.h": "c",
+			"nrfx_saadc.h": "c",
+			"acc.h": "c",
+			"nrf_ble_gatt.h": "c",
+			"ble_srv_common.h": "c",
+			"nrf_drv_twi.h": "c",
+			"main.h": "c",
+			"pwr.h": "c",
+			"defines.h": "c",
+			"freertos.h": "c",
+			"freertosconfig.h": "c",
+			"task.h": "c",
+			"app_error.h": "c",
+			"projdefs.h": "c",
+			"ble_func.h": "c",
+			"ble_advertising.h": "c",
+			"ble_bas.h": "c",
+			"ble_err.h": "c",
+			"ble_advdata.h": "c",
+			"boards.h": "c",
+			"nrf_calendar.h": "c",
+			"nrf.h": "c",
+			"CALENDAR.H": "cpp",
+			"sdk_resources.h": "c",
+			"nrf_crypto_shared.h": "c",
+			"nrf_crypto_ecc.h": "c",
+			"nrf_crypto_mem.h": "c",
+			"nrf_crypto_allocator.h": "c",
+			"app_util.h": "c",
+			"sdk_macros.h": "c",
+			"nrf_crypto_types.h": "c",
+			"functional": "c",
+			"flash_func.h": "c",
+			"app_scheduler.h": "c",
+			"nrf_gpio.h": "c",
+			"ble_cus_data.h": "c"
+		}
+	}
+}

@@ -1,0 +1,57 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"nrf_sdh.h": "c",
+			"lsm6ds3_reg.h": "c",
+			"nrfx.h": "c",
+			"nrfx_config.h": "c",
+			"sdk_config.h": "c",
+			"nrfx_common.h": "c",
+			"lsm6dsl.h": "c",
+			"ble_conn_params.h": "c",
+			"nrf_drv_saadc.h": "c",
+			"nrfx_saadc.h": "c",
+			"acc.h": "c",
+			"nrf_ble_gatt.h": "c",
+			"ble_srv_common.h": "c",
+			"nrf_drv_twi.h": "c",
+			"main.h": "c",
+			"pwr.h": "c",
+			"defines.h": "c",
+			"freertos.h": "c",
+			"freertosconfig.h": "c",
+			"task.h": "c",
+			"app_error.h": "c",
+			"projdefs.h": "c",
+			"ble_func.h": "c",
+			"ble_advertising.h": "c",
+			"ble_bas.h": "c",
+			"ble_err.h": "c",
+			"ble_advdata.h": "c",
+			"boards.h": "c",
+			"nrf_calendar.h": "c",
+			"ble_cus_data.h": "c",
+			"ble_cus_settings.h": "c",
+			"cmath": "c",
+			"fds_internal_defs.h": "c",
+			"ble_hci.h": "c",
+			"lsm6dsl_reg.h": "c",
+			"stdbool.h": "c",
+			"nrf_bootloader_info.h": "c",
+			"ble_conn_state.h": "c",
+			"nrf_svci_async_function.h": "c",
+			"type_traits": "cpp",
+			"nrf_drv_timer.h": "c",
+			"nrf_dfu_ble_svci_bond_sharing.h": "c"
+		},
+		"idf.espIdfPathWin": "d:\\Work\\esp-idf",
+		"idf.pythonBinPathWin": "C:\\Users\\aakas\\.espressif\\python_env\\idf4.3_py3.8_env\\Scripts\\python.exe",
+		"idf.customExtraPaths": "C:\\Users\\aakas\\.espressif\\tools\\xtensa-esp32-elf\\esp-2020r3-8.4.0\\xtensa-esp32-elf\\bin;C:\\Users\\aakas\\.espressif\\tools\\xtensa-esp32s2-elf\\esp-2020r3-8.4.0\\xtensa-esp32s2-elf\\bin;C:\\Users\\aakas\\.espressif\\tools\\xtensa-esp32s3-elf\\esp-2020r3-8.4.0\\xtensa-esp32s3-elf\\bin;C:\\Users\\aakas\\.espressif\\tools\\riscv32-esp-elf\\1.24.0.123_64eb9ff-8.4.0\\riscv32-esp-elf\\bin;C:\\Users\\aakas\\.espressif\\tools\\esp32ulp-elf\\2.28.51-esp-20191205\\esp32ulp-elf-binutils\\bin;C:\\Users\\aakas\\.espressif\\tools\\esp32s2ulp-elf\\2.28.51-esp-20191205\\esp32s2ulp-elf-binutils\\bin;C:\\Users\\aakas\\.espressif\\tools\\cmake\\3.16.4\\bin;C:\\Users\\aakas\\.espressif\\tools\\openocd-esp32\\v0.10.0-esp32-20210401\\openocd-esp32\\bin;C:\\Users\\aakas\\.espressif\\tools\\ninja\\1.10.2;C:\\Users\\aakas\\.espressif\\tools\\idf-exe\\1.0.1;C:\\Users\\aakas\\.espressif\\tools\\ccache\\3.7;C:\\Users\\aakas\\.espressif\\tools\\dfu-util\\0.9\\dfu-util-0.9-win64;C:\\Users\\aakas\\.espressif\\tools\\idf-python-wheels\\idf4.3_py3.9_2021-01-07",
+		"idf.customExtraVars": "{\"OPENOCD_SCRIPTS\":\"C:\\\\Users\\\\aakas\\\\.espressif\\\\tools\\\\openocd-esp32\\\\v0.10.0-esp32-20210401/openocd-esp32/share/openocd/scripts\",\"IDF_CCACHE_ENABLE\":\"1\"}"
+	}
+}

@@ -1,0 +1,64 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "C:/BuildTools/bin/make",
+            "options": {
+                "cwd": "${workspaceFolder}/fallarrest/s132/armgcc"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "clean",
+            "type": "shell",
+            "command": "C:/BuildTools/bin/make clean",
+            "options": {
+                "cwd": "${workspaceFolder}/fallarrest/s132/armgcc"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "flash",
+            "type": "shell",
+            "command": "C:/BuildTools/bin/make flash",
+            "options": {
+                "cwd": "${workspaceFolder}/fallarrest/s132/armgcc"
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "flash_softdevice",
+            "type": "shell",
+            "command": "C:/BuildTools/bin/make flash_softdevice",
+            "options": {
+                "cwd": "${workspaceFolder}/fallarrest/s132/armgcc"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "sdk_config",
+            "type": "shell",
+            "command": "C:/BuildTools/bin/make sdk_config",
+            "options": {
+                "cwd": "${workspaceFolder}/fallarrest/s132/armgcc"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "erase",
+            "type": "shell",
+            "command": "C:/BuildTools/bin/make erase",
+            "options": {
+                "cwd": "${workspaceFolder}/fallarrest/s132/armgcc"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
