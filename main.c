@@ -70,7 +70,7 @@ void uart_trasmit_str(uint8_t *ch)
  */
 static void leds_init(void)
 {
-    printf("leds_init\r\n");
+    printf("leds_init 12\r\n");
     bsp_init(BSP_INIT_LEDS, NULL); // in bsp_init() function we intializing the led
 }
 /**
