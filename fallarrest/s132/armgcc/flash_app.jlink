@@ -1,0 +1,4 @@
+r
+loadfile "D:/Testing_code/Sensor_MSB-main/fallarrest/s132/armgcc/_build/nrf52832_xxaa.hex"
+r
+q

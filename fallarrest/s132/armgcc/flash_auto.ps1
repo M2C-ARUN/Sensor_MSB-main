@@ -1,16 +1,30 @@
 # ----------------------
-# Auto Flash Script NRF52
+# Auto Build & Flash Script NRF52
 # ----------------------
 
-# --- Correct SEGGER J-Link path ---
 $JLINK = "C:\Program Files\SEGGER\JLink_V818\JLink.exe"
+$PROJECT_PATH = "D:/Testing_code/Sensor_MSB-main/fallarrest/s132/armgcc"
 
-# --- HEX files ---
 $SOFTDEVICE = "fallarrest/s132/armgcc/s132_nrf52_7.0.1_softdevice.hex"
-$BOOTLOADER = "fallarrest/s132/armgcc/_build/buildbootloader_s132.hex"
+
+$BOOTLOADER = "D:/Testing_code/Sensor_MSB-main/fallarrest/s132/armgcc/bootloader_s132.hex"
 $APP_HEX    = "fallarrest/s132/armgcc/_build/nrf52832_xxaa.hex"
 
-Write-Host "Flashing nRF52832..."
+$ERASE_SCRIPT = "$PROJECT_PATH/erase.jlink"
+$FLASH_SD    = "$PROJECT_PATH/flash_sd.jlink"
+$FLASH_BL    = "$PROJECT_PATH/flash_bl.jlink"
+$FLASH_APP   = "$PROJECT_PATH/flash_app.jlink"
+
+# --- Step 0: Clean & Build ---
+Write-Host "Building project..."
+cd $PROJECT_PATH
+
+if (Test-Path "_build/nrf52832_xxaa.hex") {
+    Remove-Item "_build/nrf52832_xxaa.hex"
+}
+# Build application
+& make nrf52832_xxaa
+Write-Host "Build completed!"
 
 # 1. Erase Chip
 & $JLINK -device nrf52 -if swd -speed 4000 -autoconnect 1 -CommanderScript erase.jlink

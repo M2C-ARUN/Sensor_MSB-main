@@ -1,3 +1,0 @@
-loadfile "fallarrest/s132/armgcc/_build/nrf52832_xxaa.hex"
-r
-exit
