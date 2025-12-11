@@ -2,7 +2,7 @@ PROJECT_NAME     := FallArrest
 TARGETS          := nrf52832_xxaa
 OUTPUT_DIRECTORY := _build
 
-SDK_ROOT := "D:/Testing_code/Sensor_MSB-main/nRF/nRF5SDK"
+SDK_ROOT := D:/Testing_code/Sensor_MSB-main/nRF/nRF5SDK
 PROJ_DIR := ../../..
 
 $(OUTPUT_DIRECTORY)/nrf52832_xxaa.out: \

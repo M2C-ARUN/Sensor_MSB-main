@@ -1,0 +1,3 @@
+loadfile "fallarrest/s132/armgcc/_build/bootloader_s132.hex"
+r
+exit
