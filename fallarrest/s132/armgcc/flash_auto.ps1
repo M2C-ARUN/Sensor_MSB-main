@@ -81,23 +81,25 @@ $doFlashBL  = Ask-YesNo "Flash Bootloader?"
 $doFlashApp = Ask-YesNo "Flash Application?"
 
 # ---------------------- Step 2: Erase Chip ----------------------
-if ($doErase) {
-    Run-JLinkScript $ERASE_SCRIPT "Erasing chip "
-}
+if ($doErase) { Run-JLinkScript $ERASE_SCRIPT "Erasing chip "}
 
 # ---------------------- Step 3: Flash SoftDevice ----------------------
-if ($doFlashSD) {
-    Run-JLinkScript $FLASH_SD "Flashing SoftDevice "
-}
+if ($doFlashSD) { Run-JLinkScript $FLASH_SD "Flashing SoftDevice "}
 
 # ---------------------- Step 4: Flash Bootloader ----------------------
-if ($doFlashBL) {
-    Run-JLinkScript $FLASH_BL "Flashing Bootloader "
-}
+if ($doFlashBL) { Run-JLinkScript $FLASH_BL "Flashing Bootloader "}
 
 # ---------------------- Step 5: Flash Application ----------------------
-if ($doFlashApp) {
-    Run-JLinkScript $FLASH_APP "Flashing Application "
-}
+if ($doFlashApp) { Run-JLinkScript $FLASH_APP "Flashing Application "}
 
-Write-Host " All Steps Completed Successfully!"
+# ---------------------- Post Flash Behavior ----------------------
+if ($doFlashBL -eq $true) {
+    Write-Host ""
+    Write-Host " DFU Target flashed successfully!"
+    Write-Host "Upload DFU firmware using nRF Connect / Mobile DFU app."
+}
+else {
+    Write-Host ""
+    Write-Host "Full program flashed successfully!"
+    Write-Host "Device is ready with Application."
+}
