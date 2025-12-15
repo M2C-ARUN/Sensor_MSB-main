@@ -41,7 +41,7 @@ extern "C" {
 #define RX_PIN_NUMBER  18
 #define TX_PIN_NUMBER  6
 #define CTS_PIN_NUMBER 5
-#define RTS_PIN_NUMBER 2
+#define RTS_PIN_NUMBER 10
 #define HWFC           false
 
 #define BUZZER_PIN          24
@@ -51,7 +51,7 @@ extern "C" {
 #define Hook_Sensor         23
 #define BATTERY_ALERT_PIN   26
 
-#define USB_RX_PIN 12
+#define USB_RX_PIN 2
 #define USB_TX_PIN 11
 
 // #define SPIS_MISO_PIN   28  // SPI MISO signal.

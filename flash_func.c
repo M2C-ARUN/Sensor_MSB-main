@@ -1577,7 +1577,11 @@ void set_hook_mode(char *hook)
         }
     }
 }
-
+/*
+// Save rotation count mode
+// a = clockwise count
+// b = anticlockwise count\
+*/
 void save_cnt_mode(uint16_t a, uint16_t b)
 {
     ret_code_t err_code;

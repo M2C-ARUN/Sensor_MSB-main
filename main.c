@@ -12,7 +12,6 @@
 #include "bsp.h"
 #include "calendar.h"
 #include "flash_func.h"
-
 bool acc_init_flag = true;
 extern bool time_written;
 bool restart = false;
@@ -44,10 +43,163 @@ void configure_ram_retention(void)
     NRF_LOG_INFO("Final Touch for Init \r\n");
 #endif // NRF52
 }
+/**
+ * @brief Function for handling UART events.
+ *
+ * @param[in] p_event Pointer to the UART event structure.
+ */
 
 void uart_error_handle(app_uart_evt_t *p_event)
 {
+   char msg[256];
+    switch (p_event->evt_type)
+    {
+    case APP_UART_COMMUNICATION_ERROR:
+    {
+        uint32_t err_src = p_event->data.error_communication;
+
+        // Handle Overrun Error
+        if (err_src & UART_ERRORSRC_OVERRUN_Msk)
+        {
+
+            // Flush RX FIFO to recover from overflow
+            uint8_t dummy;
+            while (app_uart_get(&dummy) == NRF_SUCCESS)
+            {
+                // Keep reading until the RX FIFO is empty
+                // This will discard any unread bytes in the RX FIFO
+                // app_uart_get(&dummy);
+                // Discard unread bytes
+            }
+
+        }
+
+        // Handle Parity Error
+        if (err_src & UART_ERRORSRC_PARITY_Msk)
+        {
+            uart_trasmit_str((uint8_t *)" → Parity Error\r\n");
+        }
+
+        // Handle Framing Error
+        if (err_src & UART_ERRORSRC_FRAMING_Msk)
+        {
+            uart_trasmit_str((uint8_t *)" → Framing Error\r\n");
+        }
+
+        // Handle Break Condition
+        if (err_src & UART_ERRORSRC_BREAK_Msk)
+        {
+            uart_trasmit_str((uint8_t *)" → Break Condition\r\n");
+        }
+        break;
+    }
+
+    case APP_UART_FIFO_ERROR:
+    {
+        // Report FIFO allocation or overflow errors
+        sprintf(msg, "UART FIFO ERROR: 0x%02X\r\n", (unsigned int)p_event->data.error_code);
+        uart_trasmit_str((uint8_t *)msg);
+        break;
+    }
+
+    default:
+        // Handle unknown UART event types
+        // uart_trasmit_str((uint8_t *)"UART ERROR: Unknown Event\r\n");
+        break;
+    }
 }
+/**
+ * @brief Function for handling UART events and processing commands.
+ *
+ * @param[in] p_event Pointer to the UART event structure.
+ */
+void uart_event_handle(app_uart_evt_t *p_event)
+{
+    static uint8_t data_array[UART_RX_BUF_SIZE];
+    static uint8_t index = 0;
+    uint8_t byte;
+
+    if (p_event == NULL)
+        return;
+
+    switch (p_event->evt_type)
+    {
+    case APP_UART_DATA_READY:
+        while (app_uart_get(&byte) == NRF_SUCCESS)
+        {
+            // Ignore leading newlines
+            if (index == 0 && (byte == '\n' || byte == '\r'))
+                break;
+
+            // Require start character, else reset
+            if (index == 0 && byte != 'S')
+            {
+                index = 0;
+                memset(data_array, 0, sizeof(data_array));
+                break;
+            }
+            // Buffer until newline
+            if (index < UART_RX_BUF_SIZE - 1)
+            {
+                data_array[index++] = byte;
+            }
+
+            // On newline, process command
+            if (byte == '\n' || byte == '\r')
+            {
+                data_array[index] = '\0';                // Null-terminate
+                handle_uart_command((char *)data_array); // ⬅ Call processing function
+                index = 0;
+                memset(data_array, 0, sizeof(data_array));
+            }
+        }
+        break;
+
+    case APP_UART_COMMUNICATION_ERROR:
+    case APP_UART_FIFO_ERROR:
+        uart_error_handle(p_event);
+        break;
+
+    case APP_UART_DATA:
+        uart_error_handle(p_event);
+        break;
+
+    default:
+        uart_error_handle(p_event);
+        break;
+    }
+}
+/**
+ * @brief Function to set the hook mode based on the received command.
+ *
+ * @param[in] cmd Pointer to the command string.
+ */
+void handle_uart_command(char *cmd)
+{
+    // Debug log
+     char msg1[32];
+
+    if ((strncmp(cmd, "SET_HM:", 7) == 0 || strncmp(cmd, "SET_BE:", 7) == 0) && strlen(cmd) >= 8) // Colon + at least 1 value
+    {
+        set_hook_mode(cmd);
+        memset(msg1, 0, sizeof(msg1)); 
+    }
+  else if(strncmp(cmd, "REBOOT", 6) == 0)
+    {
+        rebootDevice();
+        uart_trasmit_str((uint8_t *)"Rebooting Device...\r\n");
+    }
+    else
+    {
+        // Handle unknown or invalid command (optional)
+        // uart_trasmit_str((uint8_t *)"Invalid command\r\n");
+    }
+}
+/**
+ * @brief Function for transmitting a string over UART.
+ *
+ * @param[in] ch Pointer to the string to be transmitted.
+ */
 void uart_trasmit_str(uint8_t *ch)
 {
 #if !debug_enable
@@ -70,7 +222,6 @@ void uart_trasmit_str(uint8_t *ch)
  */
 static void leds_init(void)
 {
-    printf("leds_init 12\r\n");
     bsp_init(BSP_INIT_LEDS, NULL); // in bsp_init() function we intializing the led
 }
 /**
@@ -140,7 +291,7 @@ int main(void)
     log_init();
 #else
     const app_uart_comm_params_t comm_params = {USB_RX_PIN, USB_TX_PIN, RTS_PIN_NUMBER, CTS_PIN_NUMBER, false, false, NRF_UARTE_BAUDRATE_115200};
-    APP_UART_FIFO_INIT(&comm_params, UART_RX_BUF_SIZE, UART_TX_BUF_SIZE, uart_error_handle, APP_IRQ_PRIORITY_LOWEST, err_code);
+    APP_UART_FIFO_INIT(&comm_params, UART_RX_BUF_SIZE, UART_TX_BUF_SIZE, uart_event_handle, APP_IRQ_PRIORITY_LOW_MID, err_code);
     APP_ERROR_CHECK(err_code);
     // printf("UART Init Status: 0x%X\n", err_code); // Debug print
     // uart_trasmit_str("UART Reset\n");
