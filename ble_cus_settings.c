@@ -11,7 +11,7 @@
 
 extern bool restart;
 extern configuration_t m_device_cfg;
-
+uint8_t th[60] = "";
 /**@brief Function for handling the Connect event.
  *
  * @param[in]   p_cus       Custom Service structure.
@@ -45,7 +45,6 @@ static void on_disconnect(ble_cus_settings_t *p_cus, ble_evt_t const *p_ble_evt)
  * @param[in]   p_cus       Custom Service structure.
  * @param[in]   p_ble_evt   Event received from the BLE stack.
  */
-uint8_t th[60] = "";
 static void on_write(ble_cus_settings_t *p_cus, ble_evt_t const *p_ble_evt)
 {
 

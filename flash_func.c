@@ -36,6 +36,17 @@ extern uint16_t rac_cnt;
 extern uint16_t both_hook_disconnect;
 extern uint16_t hc_cnt;
 extern uint16_t hd_cnt;
+// Threshold flags
+extern bool x_min;
+extern bool x_max;
+extern bool y_min;
+extern bool y_max;
+extern bool z_min;
+extern bool z_max;
+extern bool net_min;
+extern bool net_max;
+extern bool pattern_flag;
+extern bool ymax_ans_cond;
 
 APP_TIMER_DEF(TIMER_HMSTOP);
 APP_TIMER_DEF(reset_timer_id);
@@ -1066,7 +1077,6 @@ void setThreshold(uint8_t *threshold)
         m_device_cfg.hook_beeptime = atoi(p);
         printf("HBT is set to %s successfully\n", p);
     }
-
     else if (strstr(threshold, "SET_TX")) // x_val high
     {
         m_device_cfg.testX_beep_th = atoi(p);
@@ -1276,17 +1286,6 @@ void dfu_process(void)
     sd_power_gpregret_set(0, BOOTLOADER_DFU_START); // GPREGRET[0]
 }
 
-// Threshold flags
-extern bool x_min;
-extern bool x_max;
-extern bool y_min;
-extern bool y_max;
-extern bool z_min;
-extern bool z_max;
-extern bool net_min;
-extern bool net_max;
-extern bool pattern_flag;
-extern bool ymax_ans_cond;
 
 /**
  * @brief This function is used to set the hook mode, buzzer mode, get the axis threshold string packet and get the device stats.

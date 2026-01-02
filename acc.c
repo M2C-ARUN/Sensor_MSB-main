@@ -2628,57 +2628,8 @@ void timer_acc_handler(void *p_context)
     // fade_led();
 }
 
-void fade_led()
-{
-    static bool increasing = true;
-    static uint16_t brightness = 0;
 
-    if (increasing)
-    {
-        brightness++;
-        if (brightness >= 100)
-        {
-            increasing = false;
-        }
-    }
-    else
-    {
-        brightness--;
-        if (brightness == 0)
-        {
-            increasing = true;
-        }
-    }
 
-    pwm_set_duty_cycle(brightness);
-}
-
-// Example of LED brightness control using PWM
-// void led_brightness_control(void)
-// {
-// Initialize PWM
-// pwm_init();
-
-// // Fade LED up and down
-// while (1)
-// {
-// Fade up
-//     for (uint16_t i = 0; i <= 100; i++)
-//     {
-//         pwm_set_duty_cycle(i);
-//         // nrf_delay_ms(50); // Adjust speed of fading
-//         printf("increse\n");
-//     }
-
-//     // Fade down
-//     for (uint16_t i = 100; i > 0; i--)
-//     {
-//         pwm_set_duty_cycle(i);
-//         // nrf_delay_ms(50);
-//         printf("decrese\n");
-//     }
-//     // }
-// }
 // bool sen_stat_detect = true;
 void motor_timer_handler()
 {
@@ -3136,36 +3087,33 @@ void AccActiveProcess(void)
     getBattLevel();
 }
 
+/* Read temperature data register */
+/* Read the temperature data from the LSM6DSL sensor
+ * and convert it to Celsius 
+ */
 void temperature_dataread(void)
 {
-    uint8_t temp_lower, temp_upper;
-    int16_t raw_temperature;
     uint8_t buf[2];
+    int16_t raw_temperature;
 
-    // Read the lower byte (0x20) and upper byte (0x21) from the temperature registers
     int32_t ret = platform_read(NULL, 0x20, buf, 2);
 
-    if (ret == NRF_SUCCESS)
-    {
-        temp_lower = buf[0]; // Lower byte from register 0x20
-        temp_upper = buf[1]; // Upper byte from register 0x21
-
-        // Combine the bytes to form the 16-bit raw temperature value
-        raw_temperature = (temp_upper << 8) | temp_lower;
-
-        // Convert to Celsius
-        temperature_celsius = lsm6dsl_from_lsb_to_celsius(raw_temperature);
-
-        // Print the temperature
-        // printf("Temperature: %.2f \u00B0C.\n", temperature_celsius);
-        // printf("Temperature: %.2f \xB0 C\n", temperature_celsius);
-    }
     if (ret != NRF_SUCCESS)
     {
         printf("Error reading temperature data: 0x%X\n", ret);
         return;
     }
+
+    // Combine bytes (signed)
+    raw_temperature = (int16_t)((buf[1] << 8) | buf[0]);
+
+    // Convert to Celsius
+    temperature_celsius = lsm6dsl_from_lsb_to_celsius(raw_temperature);
+
+    // Debug (optional)
+    //  printf("Temperature: %.2f °C\n", temperature_celsius);
 }
+
 
 static void update_step_count(int acc_magnitude)
 {

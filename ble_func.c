@@ -750,6 +750,13 @@ static void advertising_config_get(ble_adv_modes_config_t *p_config)
     p_config->ble_adv_fast_timeout = APP_ADV_DURATION;
 }
 
+// disconnect all connected bonded devices before going into DFU mode
+/**
+ * @brief Function for disconnecting a given connection handle.
+ *
+ * @param[in] conn_handle  Connection handle to be disconnected.
+ * @param[in] p_context   Context.
+ */
 void disconnect(uint16_t conn_handle, void *p_context)
 {
     UNUSED_PARAMETER(p_context);

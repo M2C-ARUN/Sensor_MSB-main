@@ -129,7 +129,7 @@ void uart_event_handle(app_uart_evt_t *p_event)
         {
             // Ignore leading newlines
             if (index == 0 && (byte == '\n' || byte == '\r'))
-                break;
+                continue;
 
             // Require start character, else reset
             if (index == 0 && byte != 'S')

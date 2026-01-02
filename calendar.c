@@ -86,6 +86,7 @@ void nrf_cal_set_time(uint32_t year, uint32_t month, uint32_t day, uint32_t hour
     m_device_cfg.rtc_time = m_time;
     setTime();
 }
+
 void nrf_cal_set_time_t(time_t time)
 {
     static time_t uncal_difftime, difftime, newtime;
@@ -155,6 +156,7 @@ char *nrf_cal_get_epoch_time_string(time_t *tt)
     t.tm_sec = m_tm_return_time1.tm_sec;
     *tt = mktime(&t);
 }
+
 void CAL_RTC_IRQHandler(void)
 {
     if (CAL_RTC->EVENTS_COMPARE[0])
