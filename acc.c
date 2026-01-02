@@ -9,6 +9,9 @@
 #include "ble_gap.h"
 #include "float.h"
 
+/* =========================================================
+ * BLE / Scan Related
+ * ========================================================= */
 extern ble_gap_addr_t gap_addr;
 
 extern bool scan_hook_stats;
@@ -16,27 +19,330 @@ extern bool is_UUID;
 extern bool is_url;
 extern uint8_t device_detect_cnt;
 
+/* =========================================================
+ * iButton / Hook Control
+ * ========================================================= */
 bool iB_start_flag = false;
-bool iB_stop_flag = false;
+bool iB_stop_flag  = false;
+
 uint8_t iB_start_cnt = 0;
-uint8_t iB_stop_cnt = 0;
+uint8_t iB_stop_cnt  = 0;
 
-#define PWM_PIN 27       // Change this to your desired PWM output pin
-#define PWM_PERIOD 20000 // 20ms period (50Hz)
+/* =========================================================
+ * Test / Trigger / Condition Flags
+ * ========================================================= */
+int  test_beep_cnt     = 0;
+bool triggered         = false;
+bool ymax_ans_cond     = false;
+int  ymax_ans_cond_cnt = 0;
 
-// void pwm_init(void);
-// void pwm_set_duty_cycle(uint16_t duty_cycle);
-// void pwm_stop(void);
-// void motor_set_speed(uint8_t duty_cycle);
+/* =========================================================
+ * PWM / Motor Control
+ * ========================================================= */
+#define PWM_PIN     27
+#define PWM_PERIOD  20000
 
 static nrf_drv_pwm_t m_pwm0 = NRF_DRV_PWM_INSTANCE(0);
 static nrf_pwm_values_individual_t seq_values;
+
 static nrf_pwm_sequence_t const seq =
-    {
-        .values.p_individual = &seq_values,
-        .length = NRF_PWM_VALUES_LENGTH(seq_values),
-        .repeats = 0,
-        .end_delay = 0};
+{
+    .values.p_individual = &seq_values,
+    .length              = NRF_PWM_VALUES_LENGTH(seq_values),
+    .repeats             = 0,
+    .end_delay           = 0
+};
+
+/* =========================================================
+ * TWI / IMU Configuration
+ * ========================================================= */
+#define TWI_INSTANCE_ID  0
+#define LSM6DSL_ADDR     LSM6DSL_ID
+
+/* =========================================================
+ * Time / Math Constants
+ * ========================================================= */
+#define MINUTE_IN_HOUR   60
+#define HOUR_IN_DAY     24
+#define RAD_TO_DEG      57.295
+#define M_PI            3.1415
+#define DT              0.01
+
+/* =========================================================
+ * Motor Direction & Orientation
+ * ========================================================= */
+uint32_t motor_clk_cnt     = 0;
+uint32_t motor_antclk_cnt  = 0;
+
+int direction_angle;
+const char *cardinal_direction;
+
+/* =========================================================
+ * Timers
+ * ========================================================= */
+APP_TIMER_DEF(MOTOR_TIMER);
+APP_TIMER_DEF(TIMER_ACC);
+APP_TIMER_DEF(TIMER_HEALTH);
+APP_TIMER_DEF(TIMER_1SEC);
+APP_TIMER_DEF(TIMER_5MIT);
+APP_TIMER_DEF(TIMER_EVENT_USER);
+
+/* =========================================================
+ * Step Counter Logic
+ * ========================================================= */
+static uint16_t step_count = 0;
+
+#define step_threshold   1100
+#define step_hysteresis  20
+#define stable_baseline  515
+
+static uint8_t step_flag = 0;
+
+/* =========================================================
+ * Device Configuration & Flags
+ * ========================================================= */
+extern configuration_t m_device_cfg;
+extern bool bit1_on;
+extern bool bit2_on;
+extern bool bit3_on;
+
+/* =========================================================
+ * TWI Transfer State
+ * ========================================================= */
+static volatile bool m_xfer_done = false;
+
+/* =========================================================
+ * Buffers & Packets
+ * ========================================================= */
+uint8_t temp1[250];
+uint8_t temp2[250];
+uint8_t rotation_packet[512];
+
+/* =========================================================
+ * Health / Power Mode
+ * ========================================================= */
+bool health_flag = false;
+bool in_lp_mode  = false;
+
+volatile double mean_HIGH = 518;
+volatile double mean_LOW  = 518;
+
+double mean_HIGH_check = 518;
+double mean_LOW_check  = 518;
+
+int array_size = 3;
+
+/* =========================================================
+ * Alert Thresholds & Codes
+ * ========================================================= */
+double array_threshold[6] = {1200, 1500, 100, 1700, 2100, 2200};
+char   array_AlertCh[6]   = {'T', 'A', 'F', 'X', 'Y', 'Z'};
+
+/* =========================================================
+ * Hook / Disconnect States
+ * ========================================================= */
+bool self_hook_disconnect = false;
+bool bhd_flag             = false;
+
+uint16_t hd_cnt  = 0;
+uint16_t hc_cnt  = 0;
+uint16_t rcc_cnt = 0;
+uint16_t rac_cnt = 0;
+
+/* =========================================================
+ * System / Delay / Advertising
+ * ========================================================= */
+uint16_t delay_counter = 0;
+bool     msd_set_flag  = false;
+
+uint8_t hook_conn     = 0;
+uint8_t batt_adv_data = 0;
+char    adv_data[10]  = "";
+
+/* =========================================================
+ * IMU Raw & Angle Data
+ * ========================================================= */
+int16_t data_raw_angular_rate[3];
+
+float AccXangle, AccYangle, AccZangle, TAccYangle;
+float gyroXangle = 0, gyroYangle = 0, gyroZangle = 0;
+float CFangleX   = 0, CFangleY   = 0, CFangleZ   = 0;
+
+/* =========================================================
+ * Rotation Tracking
+ * ========================================================= */
+int flag_tick = 1, flag_tick1 = 1;
+
+uint16_t Last_RotationF = 0;
+uint16_t Last_RotationR = 0;
+uint16_t RotationF      = 0;
+uint16_t RotationR      = 0;
+uint16_t lastangle      = 0;
+
+/* =========================================================
+ * Buzzer Control
+ * ========================================================= */
+uint16_t buz_cnt              = 0;
+uint16_t buz_en               = 0;
+uint16_t buz_stop             = 0;
+uint16_t buz_10s_cnt           = 0;
+uint16_t buz_change_on_off_cnt = 10;
+
+uint8_t  beep_counter = 0;
+volatile bool buzzer_on = false;
+
+/* =========================================================
+ * Sensor / Fall / System State
+ * ========================================================= */
+uint16_t sensor_detect = 0;
+uint16_t FTCT          = 0;
+uint16_t recunt        = 2;
+
+bool S_ok  = false;
+bool FF_EN = false;
+
+/* =========================================================
+ * System Counters
+ * ========================================================= */
+uint16_t S_O_C = 1;
+uint16_t S_C_C = 1;
+
+/* =========================================================
+ * Time Tracking
+ * ========================================================= */
+time_t t1, last_time, current_time;
+
+uint8_t timespm[20];
+uint8_t timestr[20];
+
+/* =========================================================
+ * Event / Countdown Control
+ * ========================================================= */
+volatile uint16_t cc_time      = 0;
+uint16_t fix_time              = 8;
+volatile uint8_t cc_time_enble = 0;
+volatile uint8_t event_task    = 0;
+
+/* =========================================================
+ * Battery / Hook Status
+ * ========================================================= */
+uint8_t battery_alert_cnt = 0;
+
+bool hook_cn_stat  = false;
+bool hook_dis_stat = false;
+
+/* =========================================================
+ * Miscellaneous
+ * ========================================================= */
+uint8_t hm_cmdex_buzcnt = 0;
+float   temperature_celsius;
+
+/* =========================================================
+ * TWI Driver Instance
+ * ========================================================= */
+static const nrf_drv_twi_t m_twi = NRF_DRV_TWI_INSTANCE(TWI_INSTANCE_ID);
+stmdev_ctx_t dev_ctx;
+
+uint8_t whoamI[1], rst;
+
+/* =========================================================
+ * Data Structures
+ * ========================================================= */
+typedef union
+{
+    int16_t i16bit[3];
+    uint8_t u8bit[6];
+} axis3bit16_t;
+
+typedef union
+{
+    int16_t i16bit;
+    uint8_t u8bit[2];
+} axis1bit16_t;
+
+/* =========================================================
+ * Accelerometer / Gyro Data
+ * ========================================================= */
+accData_t accData, gyrData;
+
+#define ACC_X accData.acceleration_mg[0]
+#define ACC_Y accData.acceleration_mg[1]
+#define ACC_Z accData.acceleration_mg[2]
+
+#define GYR_X gyrData.gyro_mdps[0]
+#define GYR_Y gyrData.gyro_mdps[1]
+#define GYR_Z gyrData.gyro_mdps[2]
+
+static axis3bit16_t data_raw_gyro;
+static axis3bit16_t data_raw_acceleration;
+static axis3bit16_t data_raw_ge;
+
+/* =========================================================
+ * Flags & Thresholds
+ * ========================================================= */
+uint8_t fa_flag, test_flag, ff_flag;
+uint8_t bit_0, bit_1, bit_2, bit_3, bit_4, bit_5;
+
+double fall_threshold = FALL_THRESHOLD;
+double test_threshold = TEST_THRESHOLD;
+double wake_threshold = WAKE_THRESHOLD;
+
+/* =========================================================
+ * Alert / Logging
+ * ========================================================= */
+static char AlertCh = ' ';
+__ALIGN(4) char AlertStr[250] = "";
+
+static char uid[20] = "";
+static char ts[22]  = "";
+
+/* =========================================================
+ * Axis Min / Max Tracking
+ * ========================================================= */
+typedef struct
+{
+    float min;
+    float max;
+    float delta;
+} AxisMinMax;
+
+AxisMinMax accel_x   = {.min = FLT_MAX, .max = -FLT_MAX};
+AxisMinMax accel_y   = {.min = FLT_MAX, .max = -FLT_MAX};
+AxisMinMax accel_z   = {.min = FLT_MAX, .max = -FLT_MAX};
+AxisMinMax accel_mag = {.min = FLT_MAX, .max = -FLT_MAX};
+
+/* =========================================================
+ * Delta / Direction Flags
+ * ========================================================= */
+bool x_min = false, x_max = false;
+bool y_min = false, y_max = false;
+bool z_min = false, z_max = false;
+bool net_min = false, net_max = false;
+
+bool dX_flag = false, dY_flag = false;
+bool dZ_flag = false, dA_flag = false;
+
+/* =========================================================
+ * Pattern Detection Window
+ * ========================================================= */
+static char prev_timespm[32] = {0};
+
+#define WINDOW_SIZE   6
+#define MAX_LOG_STR   512
+
+typedef struct
+{
+    char  log_str[MAX_LOG_STR];
+    float y_delta;
+    float x_delta;
+} log_entry_t;
+
+static log_entry_t log_window[WINDOW_SIZE];
+static uint8_t sec_counter = 0;
+
+bool pattern_flag = false;
+char window_packet[512];
+
 
 void pwm_init(void)
 {
@@ -100,156 +406,6 @@ void pwm_stop(void)
 {
     nrf_drv_pwm_stop(&m_pwm0, true);
 }
-
-/* TWI instance ID. */
-#define TWI_INSTANCE_ID 0
-
-#define LSM6DSL_ADDR LSM6DSL_ID
-#define MINUTE_IN_HOUR 60
-#define HOUR_IN_DAY 24
-
-#define RAD_TO_DEG 57.295
-#define M_PI 3.1415
-#define DT 0.01
-
-uint32_t motor_clk_cnt = 0;
-uint32_t motor_antclk_cnt = 0;
-int direction_angle;
-const char *cardinal_direction;
-
-// static int hook_mode_toggle_count = 0; // Counter for stable hook mode toggling
-// static int buzzer_high_count = 0;      // Counter for BUZZER_PIN high state
-APP_TIMER_DEF(MOTOR_TIMER);
-
-/* Step counter variables */
-static uint16_t step_count = 0;
-#define step_threshold 1100 // Starting threshold above stable baseline
-#define step_hysteresis 20  // Hysteresis buffer
-#define stable_baseline 515 // Observed stable magnitude
-static uint8_t step_flag = 0;
-
-APP_TIMER_DEF(TIMER_ACC);    /**< ACC timer. */
-APP_TIMER_DEF(TIMER_HEALTH); /**< ACC timer. */
-APP_TIMER_DEF(TIMER_1SEC);
-APP_TIMER_DEF(TIMER_5MIT);
-APP_TIMER_DEF(TIMER_EVENT_USER);
-
-extern configuration_t m_device_cfg;
-extern bool bit1_on;
-extern bool bit2_on;
-extern bool bit3_on;
-
-/* Indicates if operation on TWI has ended. */
-static volatile bool m_xfer_done = false;
-uint8_t temp1[250];
-uint8_t rotation_packet[512];
-uint8_t temp2[250];
-bool health_flag = false;
-bool in_lp_mode = false;
-volatile double mean_HIGH = 518;
-volatile double mean_LOW = 518;
-double mean_HIGH_check = 518;
-double mean_LOW_check = 518;
-int array_size = 3;
-
-/* changes */
-
-double array_threshold[6] = {1200, 1500, 100, 1700, 2100, 2200};
-char array_AlertCh[6] = {'T', 'A', 'F', 'X', 'Y', 'Z'};
-
-// double array_threshold[3] = {1500, 1200, 100}; // Keep only 'T', 'A', 'F'
-// char array_AlertCh[3] = {'T', 'A', 'F'};
-bool self_hook_disconnect = false;
-bool bhd_flag = false;
-
-uint16_t hd_cnt = 0;
-uint16_t hc_cnt = 0;
-uint16_t rcc_cnt = 0;
-uint16_t rac_cnt = 0;
-
-uint16_t delay_counter = 0;
-bool msd_set_flag = false;
-uint8_t hook_conn = 0;
-uint8_t batt_adv_data = 0;
-char adv_data[10] = "";
-
-int16_t data_raw_angular_rate[3];
-float AccXangle, AccYangle, AccZangle, TAccYangle;
-float gyroXangle = 0, gyroYangle = 0, gyroZangle = 0, CFangleX = 0, CFangleY = 0, CFangleZ = 0;
-int flag_tick = 1, flag_tick1 = 1;
-uint16_t Last_RotationF = 0, Last_RotationR = 0;
-uint16_t RotationF = 0, RotationR = 0;
-uint16_t lastangle = 0;
-uint16_t buz_cnt = 0;
-uint16_t buz_en = 0;
-uint16_t S_O_C = 1;
-uint16_t S_C_C = 1;
-uint16_t buz_10s_cnt = 0;
-uint16_t buz_change_on_off_cnt = 10;
-uint16_t buz_stop = 0;
-uint16_t sensor_detect = 0;
-uint16_t FTCT = 0;
-uint16_t recunt = 2;
-time_t t1, last_time, current_time;
-uint8_t timespm[20];
-uint8_t timestr[20];
-bool S_ok = false;
-bool FF_EN = false;
-volatile uint16_t cc_time = 0;
-uint16_t fix_time = 8;
-volatile uint8_t cc_time_enble = 0;
-volatile uint8_t event_task = 0;
-uint8_t battery_alert_cnt = 0;
-bool hook_cn_stat = false;
-bool hook_dis_stat = false;
-
-uint8_t hm_cmdex_buzcnt = 0;
-float temperature_celsius;
-
-/* TWI instance. */
-static const nrf_drv_twi_t m_twi = NRF_DRV_TWI_INSTANCE(TWI_INSTANCE_ID);
-
-stmdev_ctx_t dev_ctx;
-
-uint8_t whoamI[1], rst;
-
-typedef union
-{
-    int16_t i16bit[3];
-    uint8_t u8bit[6];
-} axis3bit16_t;
-
-typedef union
-{
-    int16_t i16bit;
-    uint8_t u8bit[2];
-} axis1bit16_t;
-
-accData_t accData, gyrData;
-
-#define ACC_X accData.acceleration_mg[0]
-#define ACC_Y accData.acceleration_mg[1]
-#define ACC_Z accData.acceleration_mg[2]
-
-#define GYR_X gyrData.gyro_mdps[0]
-#define GYR_Y gyrData.gyro_mdps[1]
-#define GYR_Z gyrData.gyro_mdps[2]
-
-static axis3bit16_t data_raw_gyro; // Fixed type
-static axis3bit16_t data_raw_acceleration, data_raw_ge;
-uint8_t fa_flag, test_flag, ff_flag, bit_0, bit_1, bit_2, bit_3, bit_4, bit_5;
-
-double fall_threshold = FALL_THRESHOLD; // here we put the fall threshold value which is (1500)
-double test_threshold = TEST_THRESHOLD; // in this we put the test threshold value (1200)
-double wake_threshold = WAKE_THRESHOLD; // an din this the wake threshold value ...
-
-static char AlertCh = ' ';
-// static __ALIGN(4) char AlertStr[250] = "";
-__ALIGN(4)
-char AlertStr[250] = "";
-static char uid[20] = "";
-static char ts[22] = "";
-
 /*
  * @brief  write generic device register (platform dependent)
  *
@@ -360,50 +516,6 @@ void event_user_timer_handler(void *p_context)
     }
 }
 
-// static bool buzzer_state = false;
-// bool hook_test_ok = false;
-
-// void buzzer_toggle(void)
-// {
-//     buzzer_state = !buzzer_state;
-//     if (buzzer_state)
-//     {
-//         nrf_gpio_pin_set(BUZZER_PIN); // ON
-//         // printf("buzzer on....\n");
-//     }
-//     else
-//     {
-//         nrf_gpio_pin_clear(BUZZER_PIN); // OFF
-//         // printf("buzzer off....\n");
-//     }
-// }
-
-typedef struct
-{
-    float min;
-    float max;
-    float delta;
-} AxisMinMax;
-
-AxisMinMax accel_x = {.min = FLT_MAX, .max = -FLT_MAX};
-AxisMinMax accel_y = {.min = FLT_MAX, .max = -FLT_MAX};
-AxisMinMax accel_z = {.min = FLT_MAX, .max = -FLT_MAX};
-AxisMinMax accel_mag = {.min = FLT_MAX, .max = -FLT_MAX};
-
-bool x_min = false;
-bool x_max = false;
-bool y_min = false;
-bool y_max = false;
-bool z_min = false;
-bool z_max = false;
-bool net_min = false;
-bool net_max = false;
-
-bool dX_flag = false;
-bool dY_flag = false;
-bool dZ_flag = false;
-bool dA_flag = false;
-
 void reset_acc_minmax(void)
 {
     accel_x.min = (int)fabs(ACC_X);
@@ -415,9 +527,6 @@ void reset_acc_minmax(void)
     accel_mag.min = (int)accData.magni_mean;
     accel_mag.max = (int)accData.magni_mean;
 }
-
-// Global variable to store the previous timestamp
-static char prev_timespm[32] = {0}; // Adjust size as needed
 
 static bool check_if_second_change()
 {
@@ -448,46 +557,6 @@ void reset_the_min_max_data()
     // strncpy(prev_timespm, timespm, sizeof(prev_timespm) - 1);
     // prev_timespm[sizeof(prev_timespm) - 1] = '\0'; // Ensure null-termination
 }
-
-// static bool check_if_second_change(void)
-// {
-//     // Just check, don't update
-//     return (strcmp(timespm, prev_timespm) != 0);
-// }
-
-// void reset_the_min_max_data(void)
-// {
-//     if (check_if_second_change())
-//     {
-//         // Reset min/max values
-//         reset_acc_minmax();
-
-//         // Debug log (optional)
-//         // printf("RESET: Timestamp changed to %s\n", timespm);
-
-//         // Update previous timestamp
-//         strncpy(prev_timespm, timespm, sizeof(prev_timespm) - 1);
-//         prev_timespm[sizeof(prev_timespm) - 1] = '\0'; // Ensure null-termination
-//     }
-// }
-
-#define WINDOW_SIZE 6 //  store 6 data
-#define MAX_LOG_STR 512
-
-typedef struct
-{
-    char log_str[MAX_LOG_STR]; // string packet for printing/logging
-    float y_delta;             // numeric delta for condition check
-    float x_delta;
-} log_entry_t;
-
-static log_entry_t log_window[WINDOW_SIZE];
-static uint8_t sec_counter = 0;
-bool pattern_flag = false;
-char window_packet[512];
-
-uint8_t beep_counter = 0;
-volatile bool buzzer_on = false;
 
 void update_axis_data(AxisMinMax *axis, float axis_val)
 {
@@ -535,9 +604,6 @@ void store_data(char *window_packet, float x_val)
         log_window[WINDOW_SIZE - 1].x_delta = x_val;
     }
 }
-
-bool ymax_ans_cond = false;
-int ymax_ans_cond_cnt = 0;
 
 bool check_axis(float value, int threshold)
 {
@@ -797,27 +863,6 @@ void check_pattern(void)
     //     }
     // }
 }
-
-// Then, optionally build a packet containing the whole window
-// char window_packet[512];
-// void build_window_packet(char *out_packet, size_t size)
-// {
-//     if (sec_counter < WINDOW_SIZE)
-//     {
-//         // Not enough samples yet
-//         snprintf(out_packet, size, "{status:waiting}");
-//         return;
-//     }
-
-//     snprintf(out_packet, size,
-//              "{mac:%X%X%X,time:%s,y_deltas:[%.0f,%.0f,%.0f,%.0f,%.0f]}",
-//              gap_addr.addr[2], gap_addr.addr[1], gap_addr.addr[0], timespm,
-//              log_window[0].y_delta,
-//              log_window[1].y_delta,
-//              log_window[2].y_delta,
-//              log_window[3].y_delta,
-//              log_window[4].y_delta);
-// }
 
 /**
  * @brief Handler for timer events.
@@ -1910,74 +1955,6 @@ void timer_5mit_handler(void *p_context)
     }
 }
 
-// // Function to calculate direction angle from accelerometer data
-// float calculate_direction_angle(float acc_x, float acc_y)
-// {
-//     // Calculate angle in radians using arctangent
-//     float angle_rad = atan2(acc_y, acc_x);
-
-//     // Convert to degrees
-//     float angle_deg = angle_rad * 180.0f / M_PI;
-
-//     // Normalize to 0-360 degrees
-//     if (angle_deg < 0)
-//     {
-//         angle_deg += 360.0f;
-//     }
-
-//     return angle_deg;
-// }
-
-// // Function to get cardinal direction based on angle
-// const char *get_cardinal_direction(float angle)
-// {
-//     if (angle >= 337.5f || angle < 22.5f)
-//         return "N";
-//     if (angle >= 22.5f && angle < 67.5f)
-//         return "NE";
-//     if (angle >= 67.5f && angle < 112.5f)
-//         return "E";
-//     if (angle >= 112.5f && angle < 157.5f)
-//         return "SE";
-//     if (angle >= 157.5f && angle < 202.5f)
-//         return "S";
-//     if (angle >= 202.5f && angle < 247.5f)
-//         return "SW";
-//     if (angle >= 247.5f && angle < 292.5f)
-//         return "W";
-//     if (angle >= 292.5f && angle < 337.5f)
-//         return "NW";
-//     return "Unknown";
-// }
-
-// // Example usage in your accelerometer processing function
-// void process_direction(float acc_x, float acc_y, float acc_z)
-// {
-//     // Calculate the direction angle
-//     direction_angle = calculate_direction_angle(acc_x, acc_y);
-
-//     // Get cardinal direction
-//     cardinal_direction = get_cardinal_direction(direction_angle);
-
-//     // Optional: Apply smoothing if needed
-//     static float prev_angle = 0.0f;
-//     const float ALPHA = 0.2f; // Smoothing factor (0-1)
-//     direction_angle = prev_angle * (1.0f - ALPHA) + direction_angle * ALPHA;
-//     prev_angle = direction_angle;
-
-//     // Log results
-//     printf("Direction Angle: %d degrees\n", direction_angle);
-//     printf("Cardinal Direction: %s\n", cardinal_direction);
-// }
-
-// void get_uniqueID()
-// {
-//     char unique_id[9];                  // 8 characters + null terminator
-//     srand(time(NULL));                  // Seed the random generator with current time
-//     sprintf(unique_id, "%08X", rand()); // Generate random 8-character hex ID
-//     // printf("%s\n", unique_id);
-// }
-
 void timer_health_handler(void *p_context)
 {
     ret_code_t err_code;
@@ -2000,74 +1977,6 @@ void timer_health_handler(void *p_context)
     uart_trasmit_str(AlertStr);
     health_flag = false;
 }
-
-int test_beep_cnt = 0;
-bool triggered = false;
-
-// #define WINDOW_SIZE 5
-// #define MAX_LOG_STR 256 // adjust to your packet size
-
-// static char log_window[WINDOW_SIZE][MAX_LOG_STR]; // stores 5 logs
-// static uint8_t sec_counter = 0;
-
-// // Store data in a FIFO manner (shift and store)
-// void store_data(char *rotation_packet)
-// {
-//     // If we've already stored 5 records, shift the previous records
-//     if (sec_counter >= WINDOW_SIZE)
-//     {
-//         // Shift all records one position left (FIFO)
-//         for (int i = 0; i < WINDOW_SIZE - 1; i++)
-//         {
-//             strncpy(log_window[i], log_window[i + 1], MAX_LOG_STR);
-//         }
-//         // Store the new packet in the last position
-//         strncpy(log_window[WINDOW_SIZE - 1], rotation_packet, MAX_LOG_STR - 1);
-//         log_window[WINDOW_SIZE - 1][MAX_LOG_STR - 1] = '\0'; // Ensure null terminator
-
-//         // Reset the counter to process the next 5 records
-//         sec_counter = WINDOW_SIZE;
-//     }
-//     else
-//     {
-//         // Just store the record if we're not at the 5th record yet
-//         strncpy(log_window[sec_counter], rotation_packet, MAX_LOG_STR - 1);
-//         log_window[sec_counter][MAX_LOG_STR - 1] = '\0'; // Ensure null terminator
-//         sec_counter++;
-//     }
-// }
-
-// // Print all records in the buffer (for analysis or checking)
-// void print_records()
-// {
-//     for (int i = 0; i < WINDOW_SIZE; i++)
-//     {
-//         printf("Record %d: %s\n", i + 1, log_window[i]);
-//     }
-// }
-
-// // Main logic for handling the packets
-// void handle_packet(char *rotation_packet)
-// {
-//     store_data(rotation_packet);
-
-//     // After 5 records, print them and reset for the next cycle
-//     if (sec_counter >= WINDOW_SIZE)
-//     {
-//         print_records(); // Print all stored records
-
-//         // Optionally, you can add a condition to trigger a beep based on the records
-//         // Example: Check if a certain condition is met for any record
-//         // If the 3rd record meets your criteria and others are below threshold
-//         // trigger a beep
-//         // if (1 /* your condition goes here */) {
-//         //     beep();  // Call beep function
-//         // }
-
-//         // Reset counter to start collecting the next 5 records
-//         sec_counter = 0;
-//     }
-// }
 
 /**
  * @brief Handler for timer events.
@@ -2628,9 +2537,6 @@ void timer_acc_handler(void *p_context)
     // fade_led();
 }
 
-
-
-// bool sen_stat_detect = true;
 void motor_timer_handler()
 {
     if (m_device_cfg.motorclk_flag == 1)
@@ -3114,7 +3020,6 @@ void temperature_dataread(void)
     //  printf("Temperature: %.2f °C\n", temperature_celsius);
 }
 
-
 static void update_step_count(int acc_magnitude)
 {
     static char alert_buffer[10]; // Adjust size as needed
@@ -3243,42 +3148,6 @@ void acc_gyro_data()
         //     break;
     }
 }
-
-// void getAccGyroData()
-// {
-//     ret_code_t err_code;
-//     uint8_t data_ready1 = 0;
-
-//     // Read gyroscope data
-//     lsm6dsl_gy_flag_data_ready_get(&dev_ctx, &data_ready1);
-
-//     if (data_ready1)
-//     {
-//         // Read gyroscope field data
-//         memset(data_raw_ge.u8bit, 0x00, 3 * sizeof(int16_t));
-//         err_code = lsm6dsl_angular_rate_raw_get(&dev_ctx, data_raw_ge.i16bit);
-
-//         if (err_code != NRF_SUCCESS) // Or use another appropriate error macro
-//         {
-//             printf("Error reading gyroscope data: %ld\n", err_code);
-//             return;
-//         }
-
-//         // Convert to mdps (millidegrees per second)
-//         GYR_X = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[0]);
-//         GYR_Y = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[1]);
-//         GYR_Z = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[2]);
-
-//         // Convert mdps to degrees per second
-//         // gyroXangle = GYR_X / 1000.0f; // Convert from mdps to dps
-//         // gyroYangle = GYR_Y / 1000.0f;
-//         // gyroZangle = GYR_Z / 1000.0f;
-//     }
-
-//     printf("X:%.2f, Y:%.2f, Z:%.2f\n", GYR_X, GYR_Y, GYR_Z);
-//     // printf("GYRO(mdps) - X:%.2f, Y:%.2f, Z:%2f | GYRO(dps) - X:%3.2f, Y:%3.2f, Z:%3.2f\n",
-//     //        GYR_X, GYR_Y, GYR_Z, gyroXangle, gyroYangle, gyroZangle);
-// }
 
 void getAccData(void)
 {
@@ -3535,3 +3404,228 @@ void getAccData(void)
 #endif
     }
 }
+
+
+// static bool check_if_second_change(void)
+// {
+//     // Just check, don't update
+//     return (strcmp(timespm, prev_timespm) != 0);
+// }
+
+// void reset_the_min_max_data(void)
+// {
+//     if (check_if_second_change())
+//     {
+//         // Reset min/max values
+//         reset_acc_minmax();
+
+//         // Debug log (optional)
+//         // printf("RESET: Timestamp changed to %s\n", timespm);
+
+//         // Update previous timestamp
+//         strncpy(prev_timespm, timespm, sizeof(prev_timespm) - 1);
+//         prev_timespm[sizeof(prev_timespm) - 1] = '\0'; // Ensure null-termination
+//     }
+// }
+// #define WINDOW_SIZE 5
+// #define MAX_LOG_STR 256 // adjust to your packet size
+// Then, optionally build a packet containing the whole window
+// char window_packet[512];
+// void build_window_packet(char *out_packet, size_t size)
+// {
+//     if (sec_counter < WINDOW_SIZE)
+//     {
+//         // Not enough samples yet
+//         snprintf(out_packet, size, "{status:waiting}");
+//         return;
+//     }
+
+//     snprintf(out_packet, size,
+//              "{mac:%X%X%X,time:%s,y_deltas:[%.0f,%.0f,%.0f,%.0f,%.0f]}",
+//              gap_addr.addr[2], gap_addr.addr[1], gap_addr.addr[0], timespm,
+//              log_window[0].y_delta,
+//              log_window[1].y_delta,
+//              log_window[2].y_delta,
+//              log_window[3].y_delta,
+//              log_window[4].y_delta);
+// }
+// static char log_window[WINDOW_SIZE][MAX_LOG_STR]; // stores 5 logs
+// static uint8_t sec_counter = 0;
+
+// // Store data in a FIFO manner (shift and store)
+// void store_data(char *rotation_packet)
+// {
+//     // If we've already stored 5 records, shift the previous records
+//     if (sec_counter >= WINDOW_SIZE)
+//     {
+//         // Shift all records one position left (FIFO)
+//         for (int i = 0; i < WINDOW_SIZE - 1; i++)
+//         {
+//             strncpy(log_window[i], log_window[i + 1], MAX_LOG_STR);
+//         }
+//         // Store the new packet in the last position
+//         strncpy(log_window[WINDOW_SIZE - 1], rotation_packet, MAX_LOG_STR - 1);
+//         log_window[WINDOW_SIZE - 1][MAX_LOG_STR - 1] = '\0'; // Ensure null terminator
+
+//         // Reset the counter to process the next 5 records
+//         sec_counter = WINDOW_SIZE;
+//     }
+//     else
+//     {
+//         // Just store the record if we're not at the 5th record yet
+//         strncpy(log_window[sec_counter], rotation_packet, MAX_LOG_STR - 1);
+//         log_window[sec_counter][MAX_LOG_STR - 1] = '\0'; // Ensure null terminator
+//         sec_counter++;
+//     }
+// }
+
+// // Print all records in the buffer (for analysis or checking)
+// void print_records()
+// {
+//     for (int i = 0; i < WINDOW_SIZE; i++)
+//     {
+//         printf("Record %d: %s\n", i + 1, log_window[i]);
+//     }
+// }
+
+// // Main logic for handling the packets
+// void handle_packet(char *rotation_packet)
+// {
+//     store_data(rotation_packet);
+
+//     // After 5 records, print them and reset for the next cycle
+//     if (sec_counter >= WINDOW_SIZE)
+//     {
+//         print_records(); // Print all stored records
+
+//         // Optionally, you can add a condition to trigger a beep based on the records
+//         // Example: Check if a certain condition is met for any record
+//         // If the 3rd record meets your criteria and others are below threshold
+//         // trigger a beep
+//         // if (1 /* your condition goes here */) {
+//         //     beep();  // Call beep function
+//         // }
+
+//         // Reset counter to start collecting the next 5 records
+//         sec_counter = 0;
+//     }
+// }
+// void getAccGyroData()
+// {
+//     ret_code_t err_code;
+//     uint8_t data_ready1 = 0;
+
+//     // Read gyroscope data
+//     lsm6dsl_gy_flag_data_ready_get(&dev_ctx, &data_ready1);
+
+//     if (data_ready1)
+//     {
+//         // Read gyroscope field data
+//         memset(data_raw_ge.u8bit, 0x00, 3 * sizeof(int16_t));
+//         err_code = lsm6dsl_angular_rate_raw_get(&dev_ctx, data_raw_ge.i16bit);
+
+//         if (err_code != NRF_SUCCESS) // Or use another appropriate error macro
+//         {
+//             printf("Error reading gyroscope data: %ld\n", err_code);
+//             return;
+//         }
+
+//         // Convert to mdps (millidegrees per second)
+//         GYR_X = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[0]);
+//         GYR_Y = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[1]);
+//         GYR_Z = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[2]);
+
+//         // Convert mdps to degrees per second
+//         // gyroXangle = GYR_X / 1000.0f; // Convert from mdps to dps
+//         // gyroYangle = GYR_Y / 1000.0f;
+//         // gyroZangle = GYR_Z / 1000.0f;
+//     }
+
+//     printf("X:%.2f, Y:%.2f, Z:%.2f\n", GYR_X, GYR_Y, GYR_Z);
+//     // printf("GYRO(mdps) - X:%.2f, Y:%.2f, Z:%2f | GYRO(dps) - X:%3.2f, Y:%3.2f, Z:%3.2f\n",
+//     //        GYR_X, GYR_Y, GYR_Z, gyroXangle, gyroYangle, gyroZangle);
+// }
+
+// // Function to calculate direction angle from accelerometer data
+// float calculate_direction_angle(float acc_x, float acc_y)
+// {
+//     // Calculate angle in radians using arctangent
+//     float angle_rad = atan2(acc_y, acc_x);
+
+//     // Convert to degrees
+//     float angle_deg = angle_rad * 180.0f / M_PI;
+
+//     // Normalize to 0-360 degrees
+//     if (angle_deg < 0)
+//     {
+//         angle_deg += 360.0f;
+//     }
+
+//     return angle_deg;
+// }
+
+// // Function to get cardinal direction based on angle
+// const char *get_cardinal_direction(float angle)
+// {
+//     if (angle >= 337.5f || angle < 22.5f)
+//         return "N";
+//     if (angle >= 22.5f && angle < 67.5f)
+//         return "NE";
+//     if (angle >= 67.5f && angle < 112.5f)
+//         return "E";
+//     if (angle >= 112.5f && angle < 157.5f)
+//         return "SE";
+//     if (angle >= 157.5f && angle < 202.5f)
+//         return "S";
+//     if (angle >= 202.5f && angle < 247.5f)
+//         return "SW";
+//     if (angle >= 247.5f && angle < 292.5f)
+//         return "W";
+//     if (angle >= 292.5f && angle < 337.5f)
+//         return "NW";
+//     return "Unknown";
+// }
+// static bool buzzer_state = false;
+// bool hook_test_ok = false;
+
+// void buzzer_toggle(void)
+// {
+//     buzzer_state = !buzzer_state;
+//     if (buzzer_state)
+//     {
+//         nrf_gpio_pin_set(BUZZER_PIN); // ON
+//         // printf("buzzer on....\n");
+//     }
+//     else
+//     {
+//         nrf_gpio_pin_clear(BUZZER_PIN); // OFF
+//         // printf("buzzer off....\n");
+//     }
+// }
+// // Example usage in your accelerometer processing function
+// void process_direction(float acc_x, float acc_y, float acc_z)
+// {
+//     // Calculate the direction angle
+//     direction_angle = calculate_direction_angle(acc_x, acc_y);
+
+//     // Get cardinal direction
+//     cardinal_direction = get_cardinal_direction(direction_angle);
+
+//     // Optional: Apply smoothing if needed
+//     static float prev_angle = 0.0f;
+//     const float ALPHA = 0.2f; // Smoothing factor (0-1)
+//     direction_angle = prev_angle * (1.0f - ALPHA) + direction_angle * ALPHA;
+//     prev_angle = direction_angle;
+
+//     // Log results
+//     printf("Direction Angle: %d degrees\n", direction_angle);
+//     printf("Cardinal Direction: %s\n", cardinal_direction);
+// }
+
+// void get_uniqueID()
+// {
+//     char unique_id[9];                  // 8 characters + null terminator
+//     srand(time(NULL));                  // Seed the random generator with current time
+//     sprintf(unique_id, "%08X", rand()); // Generate random 8-character hex ID
+//     // printf("%s\n", unique_id);
+// }

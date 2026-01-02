@@ -12,15 +12,17 @@
 #include "bsp.h"
 #include "calendar.h"
 #include "flash_func.h"
-bool acc_init_flag = true;
-extern bool time_written;
-bool restart = false;
+
+extern bool time_written, conn_flag;
+bool restart = false,acc_init_flag = true;
+uint32_t cnt11 = 0;
 
 #define NRF52_ONRAM1_OFFRAM1 POWER_RAM_POWER_S0POWER_On << POWER_RAM_POWER_S0POWER_Pos | POWER_RAM_POWER_S1POWER_On << POWER_RAM_POWER_S1POWER_Pos | POWER_RAM_POWER_S0RETENTION_On << POWER_RAM_POWER_S0RETENTION_Pos | POWER_RAM_POWER_S1RETENTION_On << POWER_RAM_POWER_S1RETENTION_Pos;
 
 #define NRF52_ONRAM1_OFFRAM0 POWER_RAM_POWER_S0POWER_On << POWER_RAM_POWER_S0POWER_Pos | POWER_RAM_POWER_S1POWER_On << POWER_RAM_POWER_S1POWER_Pos | POWER_RAM_POWER_S0RETENTION_Off << POWER_RAM_POWER_S0RETENTION_Pos | POWER_RAM_POWER_S1RETENTION_Off << POWER_RAM_POWER_S1RETENTION_Pos;
 
 #define NRF52_ONRAM0_OFFRAM0 POWER_RAM_POWER_S0POWER_Off << POWER_RAM_POWER_S0POWER_Pos | POWER_RAM_POWER_S1POWER_Off << POWER_RAM_POWER_S1POWER_Pos;
+
 void configure_ram_retention(void)
 {
 #ifdef NRF51
@@ -235,7 +237,9 @@ static void timers_init(void)
     ret_code_t err_code = app_timer_init(); //  in app_timer_init() function we intializing the timer
     APP_ERROR_CHECK(err_code);
 }
-
+/**
+ * @brief Function for initializing the log module.
+ */
 static void log_init(void)
 {
     ret_code_t err_code = NRF_LOG_INIT(NULL);
@@ -264,13 +268,15 @@ static void idle_state_handle(void)
         nrf_pwr_mgmt_run();
     }
 }
+/**
+ * @brief Calendar update callback function.
+ *
+ * @details This function is called when the calendar is updated.
+ */
 void calendar_updated()
 {
     __NOP();
 }
-
-extern bool conn_flag;
-uint32_t cnt11 = 0;
 /**
  * @brief Function for application main entry.
  */

@@ -1,3 +1,44 @@
+/**
+
+ * @brief This function is used to set the hook mode, buzzer mode, get the axis threshold string packet and get the device stats.
+ *
+ * @param hook pointer to the string which contains the command.
+ *
+ * @details This function takes a pointer to a string which contains the command. The function is used to set the hook mode, buzzer mode,
+ * get the axis threshold string packet and get the device stats. The command can be "SET_HM:<value>", "SET_BE:<value>",
+ * "STEP_EN:<value>", "GET_STR", "GET_KEY", "GET_DS", "GET_HS", "GET_THV", "GET_RD" or "1".
+ *
+ * If the command is "SET_HM:<value>", it sets the hook mode to the given value. If the value is 1, it enables the hook mode and
+ * if the value is 0, it disables the hook mode. If the hook mode is enabled, it sets the buzzer to on and the blue led to off.
+ * If the hook mode is disabled, it sets the buzzer to off and the blue led to on.
+ *
+ * If the command is "SET_BE:<value>", it sets the buzzer mode to the given value. If the value is 1, it enables the buzzer and
+ * if the value is 0, it disables the buzzer.
+ *
+ * If the command is "STEP_EN:<value>", it sets the step enable to the given value. If the value is 1, it enables the step and
+ * if the value is 0, it disables the step.
+ *
+ * If the command is "GET_STR", it gets the axis threshold string packet. The packet is of the form
+ * "{bp:<value>,bt:<value>,wp:<value>,MC:<value>,MA:<value>,xl:<value>,xg:<value>,yl:<value>,yg:<value>,zl:<value>,zg:<value>,al:<value>,ag:<value>,rl:<value>,rg:<value>}".
+ *
+ * If the command is "GET_KEY", it gets the key id. The key id is of the form
+ * "{KEY_ID:<value><value><value><value><value><value><value><value><value><value><value><value><value><value><value><value>}".
+ *
+ * If the command is "GET_DS", it gets the device stats. The device stats is of the form
+ * "{mac:<value><value><value>,DS_Master:<value>,key:<value><value><value><value><value><value><value><value><value><value><value><value><value><value><value>}".
+ *
+ * If the command is "GET_HS", it gets the hook stats. The hook stats is of the form
+ * "{mac:<value><value><value>,HS:<value>}".
+ *
+ * If the command is "GET_THV", it gets the threshold values. The threshold values are of the form
+ * "{mac:<value><value><value>,time:<value>,xv:<value>,yv:<value>,zv:<value>,av:<value>}".
+ *
+ * If the command is "GET_RD", it gets the rotation data. The rotation data is of the form
+ * "{mac:<value><value><value>,time:<value>,ccr:<value>,acr:<value>}".
+ *
+ * If the command is "1", it enters the dfu mode.
+ */
+
 #include "main.h"
 #include "flash_func.h"
 #include "ble_func.h"
@@ -6,53 +47,91 @@
 #include "bsp.h"
 #include "ble_gap.h"
 
+/* =========================================================
+ * BLE / Scan / Restart Control
+ * ========================================================= */
 extern ble_gap_addr_t gap_addr;
 extern bool scan_hook_stats;
 // extern bool hook_test_ok;
-/* Dummy configuration data. */
 
 extern bool restart;
+
+/* =========================================================
+ * Logging
+ * ========================================================= */
+#define MAX_LOG_LEN 256
+
+/* =========================================================
+ * Bit / Command Flags
+ * ========================================================= */
 bool bit1_on = false;
 bool bit2_on = false;
 bool bit3_on = false;
+
 bool buz_hmcmd_ex = false;
 
-bool xless_flag = false;   // X-axis less-than threshold crossed
-bool xg_flag = false;      // X-axis greater-than threshold crosse
-bool yl_flag = false;      // Y-axis less-than threshold crossed
-bool yg_flag = false;      // Y-axis greater-than threshold crossed
-bool zl_flag = false;      // Z-axis less-than threshold crossed
-bool zg_flag = false;      // Z-axis greater-than threshold crossed
-bool avg_lt_flag = false;  // Average less-than threshold crossed
-bool avg_gt_flag = false;  // Average greater-than threshold crossed
-bool rssi_lt_flag = false; // rssi less-than threshold crossed
-bool rssi_gt_flag = false; // rssi greater-than threshold crossed
+/* =========================================================
+ * Axis Threshold Flags (Instant Detection)
+ * ========================================================= */
+bool xless_flag   = false;   // X-axis less-than threshold crossed
+bool xg_flag      = false;   // X-axis greater-than threshold crossed
 
-// bool master_device = false;
-// bool slave_device = false;
+bool yl_flag      = false;   // Y-axis less-than threshold crossed
+bool yg_flag      = false;   // Y-axis greater-than threshold crossed
+
+bool zl_flag      = false;   // Z-axis less-than threshold crossed
+bool zg_flag      = false;   // Z-axis greater-than threshold crossed
+
+bool avg_lt_flag  = false;   // Average magnitude less-than threshold
+bool avg_gt_flag  = false;   // Average magnitude greater-than threshold
+
+bool rssi_lt_flag = false;   // RSSI less-than threshold crossed
+bool rssi_gt_flag = false;   // RSSI greater-than threshold crossed
+
+/* =========================================================
+ * Hook / Connection Counters (External)
+ * ========================================================= */
 extern uint16_t rcc_cnt;
 extern uint16_t rac_cnt;
 
 extern uint16_t both_hook_disconnect;
 extern uint16_t hc_cnt;
 extern uint16_t hd_cnt;
-// Threshold flags
+
+/* =========================================================
+ * Threshold State Flags (External – Window/Pattern Logic)
+ * ========================================================= */
 extern bool x_min;
 extern bool x_max;
+
 extern bool y_min;
 extern bool y_max;
+
 extern bool z_min;
 extern bool z_max;
+
 extern bool net_min;
 extern bool net_max;
+
 extern bool pattern_flag;
 extern bool ymax_ans_cond;
+
+/* =========================================================
+ * Time / HM Stop Control
+ * ========================================================= */
+bool time_written = false;
 
 APP_TIMER_DEF(TIMER_HMSTOP);
 APP_TIMER_DEF(reset_timer_id);
 
 uint32_t hm_stop_cnt = 0;
+
+/* =========================================================
+ * Threshold Data Packet
+ * ========================================================= */
 uint8_t threshold_data_packet[250];
+
+static bool volatile m_fds_initialized;
 
 configuration_t m_device_cfg =
     {
@@ -205,8 +284,6 @@ const char *fds_err_str(ret_code_t ret)
 
     return err_str[ret - NRF_ERROR_FDS_ERR_BASE];
 }
-static bool volatile m_fds_initialized;
-bool time_written = false;
 
 static void fds_evt_handler(fds_evt_t const *p_evt)
 {
@@ -304,8 +381,9 @@ void delete_all_process(void)
     }
 }
 
-/**
- * @brief   Sleep until an event is received. */
+/*
+ * @brief   Sleep until an event is received.   
+ */
 static void power_manage(void)
 {
 #ifdef SOFTDEVICE_PRESENT
@@ -381,58 +459,6 @@ void motor_reset()
         }
     }
 }
-
-// void hm1_cnfg()
-// {
-//     ret_code_t err_code;
-//     buz_en = 1;
-//     buz_hmcmd_ex = true;
-//     m_device_cfg.hook_mode = 1;
-//     m_device_cfg.buzzer_onoff_enable = 1;
-//     nrf_gpio_pin_set(BUZZER_LED);
-
-//     fds_record_desc_t desc = {0};
-//     fds_find_token_t tok = {0};
-//     err_code = fds_record_find(CONFIG_FILE, CONFIG_REC_KEY, &desc, &tok);
-//     if (err_code == NRF_SUCCESS)
-//     {
-//         err_code = fds_record_update(&desc, &m_cfg_record);
-//         if (err_code == FDS_ERR_NO_SPACE_IN_FLASH)
-//         {
-//             NRF_LOG_INFO("No space in flash, delete some records to update the config file.");
-//         }
-//         else
-//         {
-//             APP_ERROR_CHECK(err_code);
-//         }
-//     }
-// }
-
-// void hm0_cnfg()
-// {
-//     ret_code_t err_code;
-//     buz_en = 0;
-//     buz_hmcmd_ex = true;
-//     m_device_cfg.hook_mode = 0;
-//     m_device_cfg.buzzer_onoff_enable = 0;
-//     nrf_gpio_pin_set(BUZZER_LED);
-
-//     fds_record_desc_t desc = {0};
-//     fds_find_token_t tok = {0};
-//     err_code = fds_record_find(CONFIG_FILE, CONFIG_REC_KEY, &desc, &tok);
-//     if (err_code == NRF_SUCCESS)
-//     {
-//         err_code = fds_record_update(&desc, &m_cfg_record);
-//         if (err_code == FDS_ERR_NO_SPACE_IN_FLASH)
-//         {
-//             NRF_LOG_INFO("No space in flash, delete some records to update the config file.");
-//         }
-//         else
-//         {
-//             APP_ERROR_CHECK(err_code);
-//         }
-//     }
-// }
 
 void reset_device_state(void)
 {
@@ -1286,47 +1312,11 @@ void dfu_process(void)
     sd_power_gpregret_set(0, BOOTLOADER_DFU_START); // GPREGRET[0]
 }
 
-
 /**
- * @brief This function is used to set the hook mode, buzzer mode, get the axis threshold string packet and get the device stats.
+ * @brief Set hook mode command and buzzer status.
  *
- * @param hook pointer to the string which contains the command.
- *
- * @details This function takes a pointer to a string which contains the command. The function is used to set the hook mode, buzzer mode,
- * get the axis threshold string packet and get the device stats. The command can be "SET_HM:<value>", "SET_BE:<value>",
- * "STEP_EN:<value>", "GET_STR", "GET_KEY", "GET_DS", "GET_HS", "GET_THV", "GET_RD" or "1".
- *
- * If the command is "SET_HM:<value>", it sets the hook mode to the given value. If the value is 1, it enables the hook mode and
- * if the value is 0, it disables the hook mode. If the hook mode is enabled, it sets the buzzer to on and the blue led to off.
- * If the hook mode is disabled, it sets the buzzer to off and the blue led to on.
- *
- * If the command is "SET_BE:<value>", it sets the buzzer mode to the given value. If the value is 1, it enables the buzzer and
- * if the value is 0, it disables the buzzer.
- *
- * If the command is "STEP_EN:<value>", it sets the step enable to the given value. If the value is 1, it enables the step and
- * if the value is 0, it disables the step.
- *
- * If the command is "GET_STR", it gets the axis threshold string packet. The packet is of the form
- * "{bp:<value>,bt:<value>,wp:<value>,MC:<value>,MA:<value>,xl:<value>,xg:<value>,yl:<value>,yg:<value>,zl:<value>,zg:<value>,al:<value>,ag:<value>,rl:<value>,rg:<value>}".
- *
- * If the command is "GET_KEY", it gets the key id. The key id is of the form
- * "{KEY_ID:<value><value><value><value><value><value><value><value><value><value><value><value><value><value><value><value>}".
- *
- * If the command is "GET_DS", it gets the device stats. The device stats is of the form
- * "{mac:<value><value><value>,DS_Master:<value>,key:<value><value><value><value><value><value><value><value><value><value><value><value><value><value><value>}".
- *
- * If the command is "GET_HS", it gets the hook stats. The hook stats is of the form
- * "{mac:<value><value><value>,HS:<value>}".
- *
- * If the command is "GET_THV", it gets the threshold values. The threshold values are of the form
- * "{mac:<value><value><value>,time:<value>,xv:<value>,yv:<value>,zv:<value>,av:<value>}".
- *
- * If the command is "GET_RD", it gets the rotation data. The rotation data is of the form
- * "{mac:<value><value><value>,time:<value>,ccr:<value>,acr:<value>}".
- *
- * If the command is "1", it enters the dfu mode.
+ * @param hook pointer to the hook mode command string.
  */
-
 void set_hook_mode(char *hook)
 {
 
@@ -1576,11 +1566,13 @@ void set_hook_mode(char *hook)
         }
     }
 }
-/*
-// Save rotation count mode
-// a = clockwise count
-// b = anticlockwise count\
-*/
+
+/**
+ * @brief Save rotation count mode
+ *
+ * @param a clockwise count
+ * @param b anticlockwise count
+ */
 void save_cnt_mode(uint16_t a, uint16_t b)
 {
     ret_code_t err_code;
@@ -1602,7 +1594,12 @@ void save_cnt_mode(uint16_t a, uint16_t b)
         }
     }
 }
-
+/*
+ * @brief This function is used to set the time.
+ *
+ * @details This function sets the time in the device configuration structure
+ * and updates the record in flash memory.
+ */
 void setTime(void)
 {
 
@@ -1627,287 +1624,6 @@ void setTime(void)
 
     return err_code;
 }
-
-// void AddLog(char *log)
-// {
-
-//     ret_code_t err_code;
-//     fds_record_desc_t desc = {0};
-//     fds_find_token_t tok = {0};
-
-//     if (m_log_cfg.log_count == MAX_LOG)
-//     {
-//         m_log_cfg.log_count = 0;
-//     }
-
-//     NRF_LOG_INFO("Log Count:%d %s", m_log_cfg.log_count, log);
-//     // printf("addlog Count:%d\n",m_log_cfg.log_count);
-//     // printf("addlog Count & addlog is:%d %s\n",m_log_cfg.log_count,log);
-
-//     fds_record_t const record =
-//         {
-//             .file_id = LOG_FILE,
-//             .key = m_log_cfg.log_count + 1,
-//             .data.p_data = log,
-//             .data.length_words = (strlen(log) + 3) / sizeof(uint32_t)};
-
-//     err_code = fds_record_write(NULL, &record);
-//     if (err_code == NRF_SUCCESS)
-//     {
-//         NRF_LOG_INFO("Write Succesfull");
-//         /* Update log count. */
-//         m_log_cfg.log_count++;
-//         err_code = fds_record_find(LOG_CONFIG_FILE, LOG_CONFIG_KEY, &desc, &tok);
-//         if (err_code == NRF_SUCCESS)
-//         {
-//             /* Write the updated record to flash. */
-//             err_code = fds_record_update(&desc, &m_log_cfg_record);
-//             if ((err_code != NRF_SUCCESS) && (err_code == FDS_ERR_NO_SPACE_IN_FLASH))
-//             {
-//                 NRF_LOG_INFO("No space in flash, delete some records to update the config file.");
-//             }
-//             else
-//             {
-//                 NRF_LOG_INFO("Find Succesfull");
-//                 APP_ERROR_CHECK(err_code);
-//             }
-//         }
-//     }
-// }
-
-// void AddLog(char *log)
-// {
-//     ret_code_t err_code;
-//     fds_record_desc_t desc = {0};
-//     fds_find_token_t tok = {0};
-
-//     if (m_log_cfg.log_count >= MAX_LOG)
-//     {
-//         m_log_cfg.log_count = 0;
-//     }
-
-//     // Make a static copy to avoid pointer issues
-//     static char log_buffer[64];
-//     strncpy(log_buffer, log, sizeof(log_buffer));
-//     log_buffer[sizeof(log_buffer) - 1] = '\0';
-
-//     fds_record_t record =
-//         {
-//             .file_id = LOG_FILE,
-//             .key = m_log_cfg.log_count + 1,
-//             .data.p_data = log_buffer,
-//             .data.length_words = (strlen(log_buffer) + 3) / sizeof(uint32_t)};
-
-//     err_code = fds_record_write(NULL, &record);
-//     if (err_code == NRF_SUCCESS)
-//     {
-//         printf("Log written: %s\n", log_buffer);
-//         m_log_cfg.log_count++;
-
-//         err_code = fds_record_find(LOG_CONFIG_FILE, LOG_CONFIG_KEY, &desc, &tok);
-//         if (err_code == NRF_SUCCESS)
-//         {
-//             err_code = fds_record_update(&desc, &m_log_cfg_record);
-//             if (err_code == FDS_ERR_NO_SPACE_IN_FLASH)
-//             {
-//                 printf("No space in flash, triggering GC.\n");
-//                 fds_gc();
-//                 return;
-//             }
-//             APP_ERROR_CHECK(err_code);
-//         }
-//     }
-//     else if (err_code == FDS_ERR_NO_SPACE_IN_FLASH)
-//     {
-//         NRF_LOG_WARNING("FDS write failed: No space. Triggering GC.");
-//         fds_gc();
-//     }
-//     else
-//     {
-//         NRF_LOG_ERROR("FDS write failed: %d", err_code);
-//         APP_ERROR_CHECK(err_code);
-//     }
-// }
-
-// uint8_t GetLog(char *log)
-// {
-//     ret_code_t err_code;
-//     fds_record_t record;
-//     fds_record_desc_t desc = {0};
-//     fds_find_token_t tok = {0};
-
-//     if ((m_log_cfg.curr_log == MAX_LOG) && (m_log_cfg.log_count == MAX_LOG))
-//     {
-//         m_log_cfg.curr_log = 0;
-//     }
-//     else if (m_log_cfg.log_count == 0 || (m_log_cfg.log_count == m_log_cfg.curr_log))
-//     {
-//         return 0;
-//     }
-//     NRF_LOG_INFO("Get_Log Count:%d Get_Curr Log:%d", m_log_cfg.log_count, m_log_cfg.curr_log);
-//     /* A config file is in flash. Let's update it. */
-//     fds_flash_record_t log_record = {0};
-//     // err_code = fds_record_find(LOG_CONFIG_FILE, LOG_CONFIG_KEY, &desc, &tok);
-//     err_code = fds_record_find(LOG_FILE, m_log_cfg.curr_log + 1, &desc, &tok);
-//     if (err_code == NRF_SUCCESS)
-//     {
-//         NRF_LOG_INFO("LOG Found");
-//         err_code = fds_record_open(&desc, &log_record);
-//         if (err_code == NRF_SUCCESS)
-//         {
-//             /* Update log count. */
-//             m_log_cfg.curr_log++;
-//             strncpy(log, (char *)log_record.p_data, strlen((char *)log_record.p_data));
-//             NRF_LOG_INFO("LOG_check:%s", log);
-//             NRF_LOG_INFO("LOG:%s", log_record.p_data);
-//             /* Close the record when done reading. */
-//             err_code = fds_record_close(&desc);
-//             APP_ERROR_CHECK(err_code);
-
-//             /* Write the updated record to flash. */
-//             err_code = fds_record_update(&desc, &m_log_cfg_record);
-//             if ((err_code != NRF_SUCCESS) && (err_code == FDS_ERR_NO_SPACE_IN_FLASH))
-//             {
-//                 NRF_LOG_INFO("No space in flash, delete some records to update the config file.");
-//             }
-//             else
-//             {
-//                 APP_ERROR_CHECK(err_code);
-//             }
-//             return sizeof(log_record.p_data);
-//         }
-//         else
-//             return 0;
-//     }
-//     else
-//         return 0;
-// }
-
-// uint8_t GetLog(char *log)
-// {
-//     ret_code_t err_code;
-//     fds_record_t record;
-//     fds_record_desc_t desc = {0};
-//     fds_find_token_t tok = {0};
-
-//     if ((m_log_cfg.curr_log == MAX_LOG) && (m_log_cfg.log_count == MAX_LOG))
-//     {
-//         m_log_cfg.curr_log = 0;
-//     }
-//     else if (m_log_cfg.log_count == 0 || (m_log_cfg.log_count == m_log_cfg.curr_log))
-//     {
-//         return 0;
-//     }
-
-//     // printf("Get_Log Count:%d Get_Curr Log:%d\n", m_log_cfg.log_count, m_log_cfg.curr_log + 1);
-
-//     fds_flash_record_t log_record = {0};
-//     err_code = fds_record_find(LOG_FILE, m_log_cfg.curr_log + 1, &desc, &tok);
-
-//     if (err_code == NRF_SUCCESS)
-//     {
-//         NRF_LOG_INFO("LOG Found");
-//         err_code = fds_record_open(&desc, &log_record);
-
-//         if (err_code == NRF_SUCCESS)
-//         {
-//             m_log_cfg.curr_log++;
-//             size_t data_len = strlen((char *)log_record.p_data);
-//             if (data_len >= 250)
-//             {
-//                 data_len = 249; // Leave space for null-terminator
-//             }
-//             strncpy(log, (char *)log_record.p_data, data_len);
-//             log[data_len] = '\0'; // Null-terminate the buffer
-
-//             // printf("LOG_check:%s\n", log);
-//             // printf("LOG:%s\n", log_record.p_data);
-
-//             err_code = fds_record_close(&desc);
-//             APP_ERROR_CHECK(err_code);
-
-//             return data_len; // Return actual length of data
-//         }
-//     }
-//     return 0;
-// }
-
-// new changes
-
-// Add a mutex or critical section protection
-// static volatile bool fds_operation_in_progress = false;
-
-// void AddLog(char *log)
-// {
-//     ret_code_t err_code;
-//     fds_record_desc_t desc = {0};
-//     fds_find_token_t tok = {0};
-
-//     // Validate input
-//     if (log == NULL || strlen(log) == 0)
-//     {
-//         NRF_LOG_ERROR("Invalid log entry");
-//         // fds_operation_in_progress = false;
-//         return;
-//     }
-
-//     // Calculate proper length with padding
-//     uint16_t log_len = strlen(log) + 1;            // +1 for null terminator
-//     uint16_t padded_len = ((log_len + 3) / 4) * 4; // Round up to nearest word boundary
-//     uint16_t length_words = padded_len / sizeof(uint32_t);
-
-//     // Prepare record
-//     fds_record_t const record = {
-//         .file_id = LOG_FILE,
-//         .key = m_log_cfg.log_count + 1,
-//         .data.p_data = log,
-//         .data.length_words = length_words};
-
-//     // Attempt to write
-//     err_code = fds_record_write(NULL, &record);
-//     if (err_code != NRF_SUCCESS)
-//     {
-//         NRF_LOG_ERROR("Failed to write record: 0x%X", err_code);
-
-//         // Check if we need to garbage collect
-//         if (err_code == FDS_ERR_NO_SPACE_IN_FLASH)
-//         {
-//             NRF_LOG_INFO("No space, triggering GC");
-
-//             if (err_code == NRF_SUCCESS)
-//             {
-
-//                 err_code = fds_record_write(NULL, &record);
-//             }
-//         }
-//     }
-
-//     // Only increment counter if write was successful
-//     if (err_code == NRF_SUCCESS)
-//     {
-//         m_log_cfg.log_count++;
-//         if (m_log_cfg.log_count >= MAX_LOG)
-//         {
-//             m_log_cfg.log_count = 0;
-//         }
-
-//         // Update config record
-//         err_code = fds_record_find(LOG_CONFIG_FILE, LOG_CONFIG_KEY, &desc, &tok);
-//         if (err_code == NRF_SUCCESS)
-//         {
-//             err_code = fds_record_update(&desc, &m_log_cfg_record);
-//             if (err_code != NRF_SUCCESS)
-//             {
-//                 NRF_LOG_ERROR("Failed to update config: 0x%X", err_code);
-//             }
-//         }
-//         else
-//         {
-//             NRF_LOG_ERROR("Failed to find config: 0x%X", err_code);
-//         }
-//     }
-
-// }
 
 /**
  * @brief Save a log entry to flash.
@@ -1982,7 +1698,16 @@ void AddLog(char *log)
     }
 }
 
-#define MAX_LOG_LEN 256
+/*
+ * @brief This function is used to retrieve a log entry from flash.
+ *
+ * @param log pointer to the buffer where the log entry will be copied.
+ *
+ * @details This function retrieves a log entry from flash memory and copies it into the provided buffer.
+ * It also updates the current log index.
+ *
+ * @return The length of the retrieved log entry, or 0 if no more logs are available.
+ */
 uint8_t GetLog(char *log)
 {
     fds_record_desc_t desc = {0};
@@ -2011,61 +1736,12 @@ uint8_t GetLog(char *log)
     m_log_cfg.curr_log++;
     return (uint8_t)len;
 }
-
-// uint8_t GetLog(char *log)
-// {
-//     ret_code_t err_code;
-//     fds_record_t record;
-//     fds_record_desc_t desc = {0};
-//     fds_find_token_t tok = {0};
-
-//     if ((m_log_cfg.curr_log == MAX_LOG) && (m_log_cfg.log_count == MAX_LOG))
-//     {
-//         m_log_cfg.curr_log = 0;
-//     }
-//     else if (m_log_cfg.log_count == 0 || (m_log_cfg.log_count == m_log_cfg.curr_log))
-//     {
-//         return 0;
-//     }
-//     NRF_LOG_INFO("Get_Log Count:%d Get_Curr Log:%d", m_log_cfg.log_count, m_log_cfg.curr_log);
-//     /* A config file is in flash. Let's update it. */
-//     fds_flash_record_t log_record = {0};
-//     // err_code = fds_record_find(LOG_CONFIG_FILE, LOG_CONFIG_KEY, &desc, &tok);
-//     err_code = fds_record_find(LOG_FILE, m_log_cfg.curr_log + 1, &desc, &tok);
-//     if (err_code == NRF_SUCCESS)
-//     {
-//         NRF_LOG_INFO("LOG Found");
-//         err_code = fds_record_open(&desc, &log_record);
-//         if (err_code == NRF_SUCCESS)
-//         {
-//             /* Update log count. */
-//             m_log_cfg.curr_log++;
-//             strncpy(log, (char *)log_record.p_data, strlen((char *)log_record.p_data));
-//             NRF_LOG_INFO("LOG_check:%s", log);
-//             NRF_LOG_INFO("LOG:%s", log_record.p_data);
-//             /* Close the record when done reading. */
-//             err_code = fds_record_close(&desc);
-//             APP_ERROR_CHECK(err_code);
-
-//             /* Write the updated record to flash. */
-//             err_code = fds_record_update(&desc, &m_log_cfg_record);
-//             if ((err_code != NRF_SUCCESS) && (err_code == FDS_ERR_NO_SPACE_IN_FLASH))
-//             {
-//                 NRF_LOG_INFO("No space in flash, delete some records to update the config file.");
-//             }
-//             else
-//             {
-//                 APP_ERROR_CHECK(err_code);
-//             }
-//             return sizeof(log_record.p_data);
-//         }
-//         else
-//             return 0;
-//     }
-//     else
-//         return 0;
-// }
-
+/*
+    * @brief This function is used to reset the log read pointer.
+    *
+    * @details This function resets the current log index to zero and updates the log configuration
+    * record in flash memory.
+*/
 uint8_t GetLogReset()
 {
     ret_code_t err_code;
@@ -2089,7 +1765,12 @@ uint8_t GetLogReset()
     }
     return NRF_SUCCESS;
 }
-
+/*
+ * @brief This function is used to clear the log data.
+ *
+ * @details This function clears the log data by deleting all log records from flash memory
+ * and resetting the log configuration.
+ */
 uint8_t ClearLog(void)
 {
 
@@ -2116,7 +1797,15 @@ uint8_t ClearLog(void)
     err_code = fds_file_delete(LOG_FILE);
     return NRF_SUCCESS;
 }
-
+/*
+ * @brief This function is used to set the device name prefix.
+ *
+ * @param prefix pointer to the device name prefix string.
+ * @param len length of the device name prefix string.
+ *
+ * @details This function sets the device name prefix in the device configuration structure
+ * and updates the record in flash memory.
+ */
 uint8_t setPrefix(uint8_t *prefix, size_t len)
 {
 
@@ -2139,7 +1828,15 @@ uint8_t setPrefix(uint8_t *prefix, size_t len)
     }
     return NRF_SUCCESS;
 }
-
+/*
+ * @brief This function is used to set the sensor prefix.
+ *
+ * @param sensor_prefix pointer to the sensor prefix string.
+ * @param len length of the sensor prefix string.
+ *
+ * @details This function sets the sensor prefix in the device configuration structure
+ * and updates the record in flash memory.
+ */
 uint8_t setsensorPrefix(uint8_t *sensor_prefix, size_t len)
 {
 
@@ -2163,7 +1860,15 @@ uint8_t setsensorPrefix(uint8_t *sensor_prefix, size_t len)
     }
     return NRF_SUCCESS;
 }
-
+/*
+ * @brief This function is used to set the block serial number.
+ *
+ * @param serial pointer to the serial number string.
+ * @param len length of the serial number string.
+ *
+ * @details This function sets the block serial number in the device configuration structure
+ * and updates the record in flash memory.
+ */
 uint8_t setBlockSerial(uint8_t *serial, size_t len)
 {
 
@@ -2185,23 +1890,28 @@ uint8_t setBlockSerial(uint8_t *serial, size_t len)
     }
     return NRF_SUCCESS;
 }
-
+/*
+ * @brief This function is used to perform a factory reset.
+ *
+ * @details This function deletes the configuration file from flash memory,
+ * effectively resetting the device to its factory settings.
+ */
 void factoryReset()
 {
-
-    // for factory reset
-
     ret_code_t err_code;
     fds_record_desc_t desc = {0};
     fds_find_token_t tok = {0};
 
     err_code = fds_file_delete(CONFIG_FILE);
 }
-
+/*
+ * @brief This function is used to clear the rotation counter.
+ *
+ * @details This function clears the rotation counter by resetting the values in the configuration structure
+ * and updating the record in flash memory.
+ */
 void clear_rotation_counter(void)
 {
-
-    // to clear the rotation counter
 
     ret_code_t err_code;
     fds_record_desc_t desc = {0};
@@ -2225,6 +1935,15 @@ void clear_rotation_counter(void)
     }
 }
 
+/*
+ * @brief This function is used to check the command string and perform the corresponding action.
+ *
+ * @param cl pointer to the command string.
+ * @param len length of the command string.
+ *
+ * @details This function takes a pointer to a command string and its length. It checks the command string
+ * and performs the corresponding action. The command can be "CLEAR_LOG", "CLEAR_RT_CNT", or "SET_TIME".
+ */
 void cl_check(uint8_t *cl, size_t len)
 {
     uint8_t str[20];
@@ -2244,7 +1963,10 @@ void cl_check(uint8_t *cl, size_t len)
         set_user_time(str);
     }
 }
-
+/*
+// Save anticlockwise rotation count
+// b = anticlockwise count
+*/
 void set_user_time(char *st)
 {
     uint16_t val = 0;

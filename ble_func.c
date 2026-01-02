@@ -44,7 +44,8 @@ ble_gap_addr_t gap_addr;
 #define SEC_PARAM_OOB 0                                /**< Out Of Band data availability. */
 #define SEC_PARAM_MIN_KEY_SIZE 7                       /**< Minimum encryption key size. */
 #define SEC_PARAM_MAX_KEY_SIZE 16                      /**< Maximum encryption key size. */
-
+bool live_notify = false;
+bool his_notify = false;
 extern configuration_t m_device_cfg;
 bool is_UUID = false;
 bool is_url = false;
@@ -76,10 +77,19 @@ static uint8_t m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];            /**< Buf
 static uint8_t m_enc_scan_response_data[BLE_GAP_ADV_SET_DATA_SIZE_MAX]; /**< Buffer for storing an encoded scan data. */
 
 static uint8_t m_device_name[20] = DEVICE_NAME;
-
-/*
-for scanning functionality
-*/
+bool gyr_noti_flag = false;
+bool conn_flag = false;
+uint8_t th1[100];
+uint8_t bit0[10];
+uint8_t bit1[10];
+uint8_t bit2[10];
+uint8_t bit3[10];
+uint8_t bit4[10];
+uint8_t bit5[10];
+uint8_t wt[10];
+uint8_t bzt[10];
+uint8_t delaytm[10];
+uint8_t hm_stp[10];
 
 #define SCAN_INTERVAL 0x00A0 // 100 ms = 160 × 0.625 ms
 #define SCAN_WINDOW 0x00A0   // 100 ms = same as interval for continuous scan
@@ -99,6 +109,14 @@ static char const m_target_periph_name[] = "KARE-D0B58"; /**< Name of the device
 
 bool scan_hook_stats = false;
 
+extern bool self_hook_disconnect;
+extern bool bhd_flag;
+uint16_t both_hook_disconnect = 0;
+
+// Define your target UUID (LSB first as it appears in the advertising packet)
+uint8_t TARGET_UUID[] = {0x1E, 0x69, 0x1D, 0x30, 0x7E, 0x08, 0x47, 0xF0,
+                         0x8B, 0x3E, 0xA6, 0x35, 0xF3, 0x50, 0x0E, 0x6A};
+
 static char const *day_of_week[] =
     {
         "Unknown",
@@ -109,7 +127,9 @@ static char const *day_of_week[] =
         "Friday",
         "Saturday",
         "Sunday"};
-
+/**
+ * @brief Month of year strings.
+ */
 static char const *month_of_year[] =
     {
         "Unknown",
@@ -126,6 +146,9 @@ static char const *month_of_year[] =
         "November",
         "December"};
 
+/**
+* @brief Universally unique service identifiers. 
+*/
 static ble_uuid_t m_adv_uuids[] = /**< Universally unique service identifiers. */
     {
         {BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE},
@@ -133,7 +156,11 @@ static ble_uuid_t m_adv_uuids[] = /**< Universally unique service identifiers. *
         {BLE_UUID_CURRENT_TIME_SERVICE, BLE_UUID_TYPE_BLE}};
 
 /**
- * @brief Struct that contains pointers to the encoded advertising data. */
+ * @brief Advertising data.
+ * @note: Both the advertising data and scan response data are limited
+ *      to BLE_GAP_ADV_SET_DATA_SIZE_MAX = 31 bytes.
+ */
+
 static ble_gap_adv_data_t m_adv_data =
     {
         .adv_data =
@@ -251,6 +278,11 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
         break;
     }
 }
+/**
+ * @brief Function to enter System OFF mode (this function will not return;
+  wakeup will cause a reset).
+ *
+ */
 void System_OFF_Mode(void)
 {
     int32_t ret = sd_power_system_off();
@@ -285,9 +317,9 @@ static void current_time_error_handler(uint32_t nrf_error)
 }
 
 /**
- * @brief Function for handling the Current Time Service errors.
+ * @brief Function for printing the current time received from the Current Time Service.
  *
- * @param[in] p_evt  Event received from the Current Time Service client.
+ * @param[in] p_evt Event received from the Current Time Service client.
  */
 static void current_time_print(ble_cts_c_evt_t *p_evt)
 {
@@ -351,10 +383,13 @@ static void current_time_print(ble_cts_c_evt_t *p_evt)
 }
 
 /**
- * @brief
+ * @brief Function for handling the Battery Service events.
  *
- * @param[in] p_bas
- * @param[in] p_evt
+ * @details This function will be called for all Battery Service events which are passed to
+ *          the application.
+ *
+ * @param[in]   p_bas  Battery Service structure.
+ * @param[in]   p_evt  Event received from the Battery Service.
  */
 static void nrf_bas_evt_handler(ble_bas_t *p_bas, ble_bas_evt_t *p_evt)
 {
@@ -427,71 +462,10 @@ static void on_cts_c_evt(ble_cts_c_t *p_cts, ble_cts_c_evt_t *p_evt)
         break;
     }
 }
+
 /**
- * @brief Handler for timer events.
- */
-// void timer_history_handler(void *p_context)
-// {
-//     uint8_t log[250];
-//     uint8_t log_len;
-//     NRF_LOG_INFO("History Sending");
-//     // printf("History Sending\n");
-//     log_len = GetLog(log);
-//     NRF_LOG_INFO("Log length %d", log_len);
-//     printf("strlen = %d, log_len = %d\n", strlen((char *)log), log_len);
-
-//     if (log_len > 0)
-//     {
-//         NRF_LOG_INFO("LOG Alert:%s", log);
-//         printf("Saved History log is:\n");
-//         ble_data_history_value_update(&m_data, log);
-//         uart_trasmit_str(log);
-//     }
-//     else
-//     {
-//         GetLogReset();
-//         ClearLog();
-//         printf("log cleared or not available\n");
-//         NRF_LOG_INFO("History timer Stop");
-//         // printf("History timer Stop\n");
-//         app_timer_stop(TIMER_HISTORY);
-//     }
-// }
-
-// prev
-
-// void timer_history_handler(void *p_context)
-// {
-//     uint8_t log[250];
-//     uint8_t log_len;
-//     memset(log, 0, sizeof(log));
-
-//     NRF_LOG_INFO("History Sending");
-//     log_len = GetLog((char *)log);
-
-//     NRF_LOG_INFO("Log length %d", log_len);
-//     // printf("strlen = %d, log_len = %d\n", strlen((char *)log), log_len);
-
-//     if (log_len > 0)
-//     {
-//         NRF_LOG_INFO("LOG Alert:%s", log);
-//         printf("Saved History log is:\n");
-//         ble_data_history_value_update(&m_data, log);
-//         uart_trasmit_str(log);
-//     }
-//     else
-//     {
-//         GetLogReset();
-//         ClearLog();
-//         printf("log cleared or not available\n");
-//         NRF_LOG_INFO("History timer Stop");
-//         app_timer_stop(TIMER_HISTORY);
-//     }
-// }
-
-// new changes...
-/**
- * @brief Handler for timer events.
+ * @brief History Alert to BLE
+ * @param[in] p_context Context.
  */
 void timer_history_handler(void *p_context)
 {
@@ -519,8 +493,6 @@ void timer_history_handler(void *p_context)
     }
 }
 
-bool gyr_noti_flag = false;
-bool conn_flag = false;
 /**
  * @brief Function for handling the Custom Service Service events.
  *
@@ -531,8 +503,6 @@ bool conn_flag = false;
  * @param[in]   p_evt          Event received from the Custom Service.
  *
  */
-bool live_notify = false;
-bool his_notify = false;
 
 static void on_cus_data_evt(ble_cus_data_t *p_cus_service,
                             ble_cus_data_evt_t *p_evt)
@@ -624,7 +594,10 @@ static void on_cus_settings_evt(ble_cus_settings_t *p_cus_service,
 }
 
 /**
- * @snippet [Handling the data received over BLE] */
+ * @brief Function for handling the data received over BLE.
+ * @details This function processes the data received from the Nordic UART Service.
+ * @snippet [Handling the data received over BLE]
+ * */
 static void nus_data_handler(ble_nus_evt_t *p_evt)
 {
 
@@ -667,8 +640,8 @@ static void conn_params_error_handler(uint32_t nrf_error)
     APP_ERROR_HANDLER(nrf_error);
 }
 
-/**@brief Handler for shutdown preparation.
- *
+/**
+ * @brief Handler for shutdown preparation.
  * @details During shutdown procedures, this function will be called at a 1 second interval
  *          untill the function returns true. When the function returns true, it means that the
  *          app is ready to reset to DFU mode.
@@ -719,7 +692,8 @@ static bool app_shutdown_handler(nrf_pwr_mgmt_evt_t event)
 }
 
 // lint -esym(528, m_app_shutdown_handler)
-/**@brief Register application shutdown handler with priority 0.
+/**
+ * @brief Register application shutdown handler with priority 0 (highest). 
  */
 NRF_PWR_MGMT_HANDLER_REGISTER(app_shutdown_handler, 0);
 
@@ -740,7 +714,10 @@ NRF_SDH_STATE_OBSERVER(m_buttonless_dfu_state_obs, 0) =
     {
         .handler = buttonless_dfu_sdh_state_observer,
 };
-
+/**
+ * @brief Function for getting the advertising configuration.
+ * 
+ */
 static void advertising_config_get(ble_adv_modes_config_t *p_config)
 {
     memset(p_config, 0, sizeof(ble_adv_modes_config_t));
@@ -824,285 +801,9 @@ static void ble_dfu_evt_handler(ble_dfu_buttonless_evt_type_t event)
         break;
     }
 }
-
-// static void scan_ble_evt_handler(ble_evt_t const *p_ble_evt, void *p_context)
-// {
-//     ret_code_t err_code;
-
-//     switch (p_ble_evt->header.evt_id)
-//     {
-//     case BLE_GAP_EVT_CONNECTED:
-//         printf("Connected to peripheral\n");
-//         // Stop scanning once connected
-//         nrf_ble_scan_stop();
-
-//         // Update connection parameters
-//         ble_gap_conn_params_t conn_params;
-//         memset(&conn_params, 0, sizeof(conn_params));
-//         conn_params.min_conn_interval = MSEC_TO_UNITS(15, UNIT_1_25_MS); // Increase minimum interval
-//         conn_params.max_conn_interval = MSEC_TO_UNITS(30, UNIT_1_25_MS); // Increase maximum interval
-//         conn_params.slave_latency = 0;
-//         conn_params.conn_sup_timeout = MSEC_TO_UNITS(4000, UNIT_10_MS); // Increase supervision timeout
-
-//         err_code = sd_ble_gap_conn_param_update(p_ble_evt->evt.gap_evt.conn_handle, &conn_params);
-//         APP_ERROR_CHECK(err_code);
-//         break;
-//         ;
-
-//     case BLE_GAP_EVT_DISCONNECTED:
-//         printf("Disconnected, reason: %d\n", p_ble_evt->evt.gap_evt.params.disconnected.reason);
-//         // Restart scanning after disconnection
-//         scan_start();
-//         break;
-
-//     case BLE_GAP_EVT_CONN_PARAM_UPDATE:
-//         printf("Connection parameters updated\n");
-//         break;
-
-//     case BLE_GAP_EVT_PHY_UPDATE_REQUEST:
-//     {
-//         printf("PHY update request\n");
-//         ble_gap_phys_t const phys =
-//             {
-//                 .rx_phys = BLE_GAP_PHY_AUTO,
-//                 .tx_phys = BLE_GAP_PHY_AUTO,
-//             };
-//         err_code = sd_ble_gap_phy_update(p_ble_evt->evt.gap_evt.conn_handle, &phys);
-//         APP_ERROR_CHECK(err_code);
-//     }
-//     break;
-
-//     case BLE_GATTC_EVT_TIMEOUT:
-//         printf("GATT Client Timeout\n");
-//         err_code = sd_ble_gap_disconnect(p_ble_evt->evt.gattc_evt.conn_handle,
-//                                          BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
-//         APP_ERROR_CHECK(err_code);
-//         break;
-
-//     case BLE_GATTS_EVT_TIMEOUT:
-//         printf("GATT Server Timeout\n");
-//         err_code = sd_ble_gap_disconnect(p_ble_evt->evt.gatts_evt.conn_handle,
-//                                          BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
-//         APP_ERROR_CHECK(err_code);
-//         break;
-
-//     default:
-//         // No implementation needed.
-//         break;
-//     }
-// }
-
-/*
-get the manufaturer data of scanned device
-*/
-// this is for the beacon
-
-// static void scan_evt_handler(scan_evt_t const *p_scan_evt)
-// {
-//     switch (p_scan_evt->scan_evt_id)
-//     {
-//     case NRF_BLE_SCAN_EVT_NOT_FOUND:
-//     {
-//         ble_gap_evt_adv_report_t const *p_adv = p_scan_evt->params.p_not_found;
-//         uint8_t *p_data = (uint8_t *)p_adv->data.p_data;
-//         uint16_t length = p_adv->data.len;
-
-//         // bool is_target = false;
-
-//         // First pass to detect target device name
-//         for (uint8_t i = 0; i < length;)
-//         {
-//             uint8_t field_length = p_data[i];
-//             if (field_length == 0 || i + field_length >= length)
-//                 break;
-
-//             uint8_t field_type = p_data[i + 1];
-
-//             if (field_type == BLE_GAP_AD_TYPE_COMPLETE_LOCAL_NAME ||
-//                 field_type == BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME)
-//             {
-//                 char name[32] = {0};
-//                 memcpy(name, &p_data[i + 2], field_length - 1);
-//                 // if (strcmp(name, "KARE-02") == 0)
-//                 if (strcmp(name, "KARE-02") == 0)
-//                 {
-//                     is_target = true;
-//                     scan_again = true;
-//                     printf("\nDevice Name: %s\n", name);
-//                 }
-//             }
-//             i += field_length + 1;
-//         }
-
-//         // Only parse further if it's our target device
-//         if (is_target)
-//         {
-//             printf("Raw Adv Data (Len %d): ", length);
-//             for (uint8_t j = 0; j < length; j++)
-//             {
-//                 printf("%02X ", p_data[j]);
-//             }
-//             printf("\n");
-
-// for (uint8_t i = 0; i < length;)
-// {
-//     uint8_t field_length = p_data[i];
-//     if (field_length == 0 || i + field_length >= length) break;
-
-//     uint8_t field_type = p_data[i + 1];
-
-//     switch (field_type)
-//     {
-//     case BLE_GAP_AD_TYPE_FLAGS:
-//         printf("Flags: 0x%02X\n", p_data[i + 2]);
-//         break;
-
-//     case BLE_GAP_AD_TYPE_16BIT_SERVICE_UUID_COMPLETE:
-//         printf("Service UUID: 0x%02X%02X\n", p_data[i + 3], p_data[i + 2]);
-//         break;
-
-//     case BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA:
-//     {
-//         uint8_t *manuf_data = &p_data[i + 2];
-//         uint8_t manuf_data_len = field_length - 1;
-
-//         printf("Manufacturer Specific Data: ");
-//         for (uint8_t j = 0; j < manuf_data_len; j++)
-//         {
-//             printf("%02X ", manuf_data[j]);
-//         }
-//         printf("\n");
-
-//         if (manuf_data_len >= 2)
-//         {
-//             uint16_t company_id = (manuf_data[1] << 8) | manuf_data[0];
-//             printf("Company ID: 0x%04X\n", company_id);
-//         }
-//     }
-//     break;
-
-//     default:
-//         break;
-//     }
-
-//     i += field_length + 1;
-// }
-//         }
-//         break;
-//     }
-
-//     default:
-//         break;
-//     }
-// }
-
-// this is working for the sensor
-
-// static void scan_evt_handler(scan_evt_t const *p_scan_evt)
-// {
-//     switch (p_scan_evt->scan_evt_id)
-//     {
-//     case NRF_BLE_SCAN_EVT_NOT_FOUND:
-//     {
-//         ble_gap_evt_adv_report_t const *p_adv = p_scan_evt->params.p_not_found;
-//         uint8_t *p_data = (uint8_t *)p_adv->data.p_data;
-//         uint16_t length = p_adv->data.len;
-
-//         // First check if this is our target device
-//         // bool is_target = false;
-//         for (uint8_t i = 0; i < length;)
-//         {
-//             uint8_t field_length = p_data[i];
-//             uint8_t field_type = p_data[i + 1];
-
-//             if (field_type == BLE_GAP_AD_TYPE_COMPLETE_LOCAL_NAME ||
-//                 field_type == BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME)
-//             {
-//                 char name[32] = {0};
-//                 memcpy(name, &p_data[i + 2], field_length - 1);
-//                 if (strcmp(name, "KARE-03") == 0) // Replace with your target name
-//                 {
-//                     is_target = true;
-//                     printf("\nDevice found & Name is: %s\n", name);
-//                 }
-//             }
-//             i += field_length + 1;
-//         }
-
-//         // Only print details if it's our target device
-//         if (is_target)
-//         {
-
-//             for (uint8_t i = 0; i < length;)
-//             {
-//                 uint8_t field_length = p_data[i];
-//                 uint8_t field_type = p_data[i + 1];
-
-//                 switch (field_type)
-//                 {
-//                 case BLE_GAP_AD_TYPE_FLAGS:
-//                     printf("Flags: 0x%02X\n", p_data[i + 2]);
-//                     break;
-
-//                 case BLE_GAP_AD_TYPE_16BIT_SERVICE_UUID_COMPLETE:
-//                     printf("Service UUID: 0x%02X%02X\n", p_data[i + 3], p_data[i + 2]);
-//                     break;
-
-//                 case BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA:
-//                     printf("Manufacturer Data: ");
-//                     for (uint8_t j = 0; j < field_length - 1; j++)
-//                     {
-//                         printf("%02X ", p_data[i + 2 + j]);
-//                     }
-//                     printf("\n");
-
-//                     // Extract manufacturer-specific values
-//                     // if (field_length >= 5) // Ensure we have enough bytes
-//                     // {
-//                     //     char status_str[2] = {0};          // Temporary string to store the status
-//                     //     status_str[0] = p_data[i + 2 + 2]; // Store the ASCII character
-
-//                     //     uint8_t status = atoi(status_str);    // Convert ASCII to integer
-//                     //     uint8_t battery1 = p_data[i + 2 + 3]; // 39 (battery part 1)
-//                     //     uint8_t battery2 = p_data[i + 2 + 4]; // 33 (battery part 2)
-
-//                     //     printf("Status: %c\n", p_data[i + 2 + 2]); // Print ASCII status
-//                     //     printf("Battery: %c%c\n", battery1, battery2);
-
-//                     //     if (!scan_hook_stats && status == 0)
-//                     //     {
-//                     //         printf("hello the status is 0\n");
-//                     //         // nrf_gpio_pin_set(MOTOR_PIN2);
-//                     //         scan_hook_stats = true;
-//                     //     }
-
-//                     //     if (scan_hook_stats && status == 1)
-//                     //     {
-//                     //         printf("hello the status is 1\n");
-//                     //         // nrf_gpio_pin_clear(MOTOR_PIN2);
-//                     //         scan_hook_stats = false;
-//                     //     }
-//                     // }
-//                     break;
-//                 }
-//                 i += field_length + 1;
-//             }
-//             // printf("RSSI: %d\n", p_adv->rssi);
-//             // printf("------------------------\n");
-//         }
-//     }
-//     break;
-//     }
-// }
-
-extern bool self_hook_disconnect;
-extern bool bhd_flag;
-uint16_t both_hook_disconnect = 0;
-
-// Define your target UUID (LSB first as it appears in the advertising packet)
-uint8_t TARGET_UUID[] = {0x1E, 0x69, 0x1D, 0x30, 0x7E, 0x08, 0x47, 0xF0,
-                         0x8B, 0x3E, 0xA6, 0x35, 0xF3, 0x50, 0x0E, 0x6A};
-
+/**
+ * @brief Scan event handler.
+ */
 static void scan_evt_handler(scan_evt_t const *p_scan_evt)
 {
     switch (p_scan_evt->scan_evt_id)
@@ -1219,7 +920,7 @@ static void scan_evt_handler(scan_evt_t const *p_scan_evt)
                     // printf("md_hookcmd_stats: %c (%d)\n", m_hookcmd_stats, master_hcmd_status);
                     // printf("md_hookdisconnect: %c (%d)\n", m_hd_stats, master_hd_status);
                     // printf("\n");
-                    
+
                     // if (master_hd_status == 1)
                     // {
                     //     bhd_flag = true;
@@ -1317,7 +1018,11 @@ static void scan_evt_handler(scan_evt_t const *p_scan_evt)
     }
     }
 }
-
+/**
+ * @brief Function to parse iBeacon data from advertisement payload.
+ * @param[in] data Pointer to the advertisement data.
+ * @param[in] len Length of the advertisement data.
+ */
 void parse_ibeacon_data(uint8_t *data, uint8_t len)
 {
     // Verify minimum length and iBeacon header
@@ -1372,7 +1077,11 @@ void parse_ibeacon_data(uint8_t *data, uint8_t len)
     }
     printf("\n");
 }
-
+/**
+ * @brief Function to parse Eddystone-URL data from advertisement payload.
+ * @param[in] data Pointer to the advertisement data.
+ * @param[in] len Length of the advertisement data.
+ */
 void parse_eddystone_url(uint8_t *data, uint8_t len)
 {
     // Minimum Eddystone-URL frame is 4 bytes
@@ -1446,75 +1155,9 @@ void parse_eddystone_url(uint8_t *data, uint8_t len)
     //     printf("  URL: %s\n", url);
     // }
 }
-// void parse_ibeacon_data(uint8_t *data, uint8_t len)
-// {
-//     // Verify iBeacon header
-//     if (len < 25)
-//         return;
-//     if (data[0] != 0x4C || data[1] != 0x00 ||
-//         data[2] != 0x02 || data[3] != 0x15)
-//         return;
-
-//     printf("iBeacon Config Mode Data:\n");
-
-//     // UUID (16 bytes)
-//     printf("  UUID: ");
-//     for (uint8_t i = 4; i < 20; i++)
-//     {
-//         printf("%02X", data[i]);
-//     }
-//     printf("\n");
-
-//     // Major (2 bytes, big-endian)
-//     uint16_t major = (data[20] << 8) | data[21];
-//     printf("  Major: %u (0x%04X)\n", major, major);
-
-//     // Minor (2 bytes, big-endian)
-//     uint16_t minor = (data[22] << 8) | data[23];
-//     printf("  Minor: %u (0x%04X)\n", minor, minor);
-
-//     // TX Power (1 byte)
-//     int8_t tx_power = (int8_t)data[24];
-//     printf("  TX Power: %ddBm\n", tx_power);
-
-//     // Print full data for debugging
-//     printf("  Raw Data: ");
-//     for (int i = 0; i < len; i++)
-//     {
-//         printf("%02X ", data[i]);
-//     }
-//     printf("\n");
-// }
-
-// void parse_custom_beacon_data(uint8_t *data, uint8_t len)
-// {
-//     // Check for minimum length needed for your beacon format
-//     if (len < 10)
-//         return; // Adjust this based on your actual format
-
-//     // Try to identify your beacon pattern
-//     if (data[0] == 0x75 && data[1] == 0x00) // Check for your beacon signature
-//     {
-//         printf("Custom Beacon Detected:\n");
-
-//         // Extract Major (example positions - adjust these!)
-//         uint16_t major = (data[6] << 8) | data[7]; // Example position
-//         printf("  Major: %u (0x%04X)\n", major, major);
-
-//         // Extract Minor (example positions - adjust these!)
-//         uint16_t minor = (data[8] << 8) | data[9]; // Example position
-//         printf("  Minor: %u (0x%04X)\n", minor, minor);
-
-//         // Print full data for debugging
-//         printf("  Raw Data: ");
-//         for (int i = 0; i < len; i++)
-//         {
-//             printf("%02X ", data[i]);
-//         }
-//         printf("\n");
-//     }
-// }
-
+/**
+ * @brief Function for initializing the scanning and setting the filters.
+ */
 static void scan_init(void)
 {
     ret_code_t err_code;
@@ -1544,7 +1187,9 @@ static void scan_init(void)
 
     printf("Scanning initialized.\n");
 }
-
+/**
+ * @brief Function for starting scanning.
+ */
 void blescan_start(void)
 {
     ret_code_t err_code = nrf_ble_scan_start(&m_scan);
@@ -1552,7 +1197,6 @@ void blescan_start(void)
 
     printf("Scan started.\n");
 }
-
 /**
  * @brief Function for handling BLE events.
  *
@@ -1867,7 +1511,10 @@ static void advertising_init(void)
 
     ble_advertising_conn_cfg_tag_set(&m_advertising, APP_BLE_CONN_CFG_TAG);
 }
-
+/**
+ * @brief Function to update advertising data based on hook connection status.
+ * @param new_hook_conn New hook connection status (1 for connected, 0 for disconnected).
+ */
 void update_advertising_data(uint8_t new_hook_conn)
 {
     ret_code_t err_code;
@@ -1922,7 +1569,7 @@ void update_advertising_data(uint8_t new_hook_conn)
 
 /**
  * @brief Send History on BLE
- *
+ * @note This function starts a timer to send historical data over BLE at regular intervals.
  */
 void SendHistory(void)
 {
@@ -1936,29 +1583,18 @@ void SendHistory(void)
 
 /**
  * @brief Function for initializing services that will be used by the application.
- *
  * @details Initialize the Heart Rate, Battery and Device Information services.
  */
-uint8_t th1[100];
-uint8_t bit0[10];
-uint8_t bit1[10];
-uint8_t bit2[10];
-uint8_t bit3[10];
-uint8_t bit4[10];
-uint8_t bit5[10];
-uint8_t wt[10];
-uint8_t bzt[10];
-uint8_t delaytm[10];
-uint8_t hm_stp[10];
-
-// Function to Get MAC Address
 void get_mac_address(uint8_t *mac_addr)
 {
     ble_gap_addr_t addr;
     sd_ble_gap_addr_get(&addr);     // Get device BLE address
     memcpy(mac_addr, addr.addr, 6); // Copy the MAC address
 }
-
+/**
+ * @brief Function for initializing services that will be used by the application.
+ * @details Initialize the Heart Rate, Battery and Device Information services.
+ */
 void services_init(void)
 {
 
@@ -2249,7 +1885,9 @@ void advertising_start(bool erase_bonds)
         APP_ERROR_CHECK(ret);
     }
 }
-
+/**
+ * @brief Function to get Current Time from CTS Service
+ */
 void get_cts()
 {
     ret_code_t err_code;
@@ -2287,7 +1925,8 @@ void ble_stack_init(void)
 }
 
 /**
- * @brief Database discovery collector initialization.
+ * @brief Function for initializing the Database Discovery Module.
+ * @details This function initializes the database discovery module.
  */
 void db_discovery_init(void)
 {
@@ -2301,9 +1940,9 @@ void db_discovery_init(void)
     ret_code_t err_code = ble_db_discovery_init(&db_init);
     APP_ERROR_CHECK(err_code);
 }
-
 /**
- * @brief Function for the Peer Manager initialization.
+ * @brief Function for initializing the Peer Manager.
+ * /
  */
 static void peer_manager_init(void)
 {
@@ -2351,7 +1990,6 @@ static void peer_manager_init(void)
 
 /**
  * @brief BLE Stack Initialization
- *
  */
 void ble_init(void)
 {
@@ -2394,7 +2032,6 @@ void battery_level_update(uint8_t battery_level)
 
 /**
  * @brief Live Alert to BLE
- *
  * @param[in] alert Alerts
  */
 ret_code_t live_alert_update(uint8_t *alert)
@@ -2417,7 +2054,6 @@ ret_code_t live_alert_update(uint8_t *alert)
 
 /**
  * @brief Threshold Setting to BLE
- *
  * @param[in] th Threshold
  */
 void th_settings_update(uint8_t *th, size_t len)
@@ -2439,7 +2075,6 @@ void th_settings_update(uint8_t *th, size_t len)
 
 /**
  * @brief Send Acc Mean to BLE
- *
  * @param[in] mean
  */
 void sendMean(uint8_t *mean)
@@ -2455,7 +2090,10 @@ void sendMean(uint8_t *mean)
         APP_ERROR_CHECK(err_code);
     }
 }
-
+/**
+ * @brief Wake Up BLE Advertising
+ *
+ */
 void wakeUpBLE(void)
 {
     ret_code_t err_code;
@@ -2463,7 +2101,10 @@ void wakeUpBLE(void)
     err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
 }
-
+/**
+ * @brief Raw Data to BLE
+ * * @param[in] alert Alerts
+ */
 void raw_data_update(uint8_t *alert)
 {
     ret_code_t err_code;
@@ -2481,21 +2122,3 @@ void raw_data_update(uint8_t *alert)
     }
     return err_code;
 }
-
-// void step_data_update(uint8_t *alert)
-// {
-//     ret_code_t err_code;
-
-//     err_code = ble_new_char_value_update(&m_data, alert);
-//     if ((err_code != NRF_SUCCESS) &&
-//         (err_code != NRF_ERROR_INVALID_STATE) &&
-//         (err_code != NRF_ERROR_RESOURCES) &&
-//         (err_code != NRF_ERROR_BUSY) &&
-//         (err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING))
-//     {
-//         NRF_LOG_INFO("rerr_code-> %d\n\r", err_code);
-//         NRF_LOG_INFO("raw data error case 6\r\n");
-//         APP_ERROR_HANDLER(err_code);
-//     }
-//     return err_code;
-// }
