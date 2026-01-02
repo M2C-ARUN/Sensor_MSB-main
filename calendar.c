@@ -24,13 +24,17 @@ static uint32_t m_rtc_increment = 60;
 static void (*cal_event_callback)(void) = 0;
 
 APP_TIMER_DEF(TIMER_CAL);
-
+/**
+ * @brief RTC interrupt handler.
+ */
 void timer_test_handler(void *p_context)
 {
     static int count = 0;
     NRF_LOG_INFO("tIMER %d", count++);
 }
-
+/**
+ * @brief Function for initializing the Calendar module.
+ */
 void nrf_cal_init(void)
 {
     // Select the 32 kHz crystal and start the 32 kHz clock
@@ -49,7 +53,9 @@ void nrf_cal_init(void)
     NVIC_SetPriority(CAL_RTC_IRQn, CAL_RTC_IRQ_Priority);
     NVIC_EnableIRQ(CAL_RTC_IRQn);
 }
-
+/**
+ * @brief Function for setting the calendar callback.
+ */
 void nrf_cal_set_callback(void (*callback)(void), uint32_t interval)
 {
     // Set the calendar callback, and set the callback interval in seconds
@@ -59,7 +65,9 @@ void nrf_cal_set_callback(void (*callback)(void), uint32_t interval)
     CAL_RTC->TASKS_CLEAR = 1;
     CAL_RTC->CC[0] = interval * 8;
 }
-
+/**
+ * @brief Function for setting the calendar time.
+ */
 void nrf_cal_set_time(uint32_t year, uint32_t month, uint32_t day, uint32_t hour, uint32_t minute, uint32_t second)
 {
     int data = 0;
@@ -86,7 +94,9 @@ void nrf_cal_set_time(uint32_t year, uint32_t month, uint32_t day, uint32_t hour
     m_device_cfg.rtc_time = m_time;
     setTime();
 }
-
+/**
+ * @brief Function for setting the calendar time using time_t.
+ */
 void nrf_cal_set_time_t(time_t time)
 {
     static time_t uncal_difftime, difftime, newtime;
@@ -103,7 +113,9 @@ void nrf_cal_set_time_t(time_t time)
     // Assign the new time to the local time variables
     m_time = m_last_calibrate_time = newtime;
 }
-
+/**
+ * @brief Function for getting the calendar time.
+ */
 struct tm *nrf_cal_get_time(void)
 {
     time_t return_time;
@@ -111,7 +123,9 @@ struct tm *nrf_cal_get_time(void)
     m_tm_return_time = *localtime(&return_time);
     return &m_tm_return_time;
 }
-
+/**
+ * @brief Function for getting the calibrated calendar time.
+ */
 struct tm *nrf_cal_get_time_calibrated(void)
 {
     time_t uncalibrated_time, calibrated_time;
@@ -125,7 +139,9 @@ struct tm *nrf_cal_get_time_calibrated(void)
     else
         return nrf_cal_get_time();
 }
-
+/**
+ * @brief Function for getting the calendar time as a string.
+ */
 char *nrf_cal_get_time_string(bool calibrated)
 {
     static char cal_string[80];
@@ -138,6 +154,9 @@ char *nrf_cal_get_time_string(bool calibrated)
     // strftime(cal_string, 80, "%x   %H:%M:%S", (calibrated ? nrf_cal_get_time_calibrated() : nrf_cal_get_time()));
     return cal_string;
 }
+/**
+ * @brief Function for getting the epoch time.
+ */
 char *nrf_cal_get_epoch_time_string(time_t *tt)
 {
 
@@ -156,7 +175,9 @@ char *nrf_cal_get_epoch_time_string(time_t *tt)
     t.tm_sec = m_tm_return_time1.tm_sec;
     *tt = mktime(&t);
 }
-
+/**
+ * @brief RTC interrupt handler.
+ */
 void CAL_RTC_IRQHandler(void)
 {
     if (CAL_RTC->EVENTS_COMPARE[0])

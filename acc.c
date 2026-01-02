@@ -343,7 +343,9 @@ static uint8_t sec_counter = 0;
 bool pattern_flag = false;
 char window_packet[512];
 
-
+/**
+ * @brief Initialize PWM for buzzer control.
+ */
 void pwm_init(void)
 {
     ret_code_t err_code;
@@ -379,7 +381,10 @@ void pwm_init(void)
     nrf_drv_pwm_simple_playback(&m_pwm0, &seq, 1, NRF_DRV_PWM_FLAG_LOOP);
     printf("pwm init\n");
 }
-
+/**
+ * @brief Set PWM duty cycle for buzzer.
+ * @param duty_cycle Duty cycle percentage (0-100).
+ */
 void pwm_set_duty_cycle(uint16_t duty_cycle)
 {
     if (duty_cycle > 100)
@@ -401,12 +406,14 @@ void pwm_set_duty_cycle(uint16_t duty_cycle)
     nrf_drv_pwm_stop(&m_pwm0, false);
     nrf_drv_pwm_simple_playback(&m_pwm0, &updated_seq, 1, NRF_DRV_PWM_FLAG_LOOP);
 }
-
+/** 
+ * @brief Stop PWM buzzer.
+ */
 void pwm_stop(void)
 {
     nrf_drv_pwm_stop(&m_pwm0, true);
 }
-/*
+/** 
  * @brief  write generic device register (platform dependent)
  *
  * @param  handle    customizable argument. In this examples is used in
@@ -427,9 +434,8 @@ int32_t platform_write(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
     return 0;
 }
 
-/*
+/** 
  * @brief  Read generic device register (platform dependent)
- *
  * @param  handle    customizable argument. In this examples is used in
  *                   order to select the correct sensor bus handler.
  * @param  reg       register to read
@@ -515,7 +521,9 @@ void event_user_timer_handler(void *p_context)
         cc_time_enble = 1;
     }
 }
-
+/**
+ * @brief Reset accelerometer min/max values.
+ */
 void reset_acc_minmax(void)
 {
     accel_x.min = (int)fabs(ACC_X);
@@ -527,7 +535,10 @@ void reset_acc_minmax(void)
     accel_mag.min = (int)accData.magni_mean;
     accel_mag.max = (int)accData.magni_mean;
 }
-
+/**
+ * @brief Check if timestamp has changed.
+ * @return true if timestamp has changed, false otherwise.
+ */
 static bool check_if_second_change()
 {
     // Check if timespm is different from prev_timespm
@@ -543,7 +554,11 @@ static bool check_if_second_change()
         return false;
     }
 }
-
+/**
+ * @brief Reset min/max data if timestamp changes.
+ * This function checks if the timestamp has changed
+ * and resets the min/max data accordingly.
+ */
 void reset_the_min_max_data()
 {
     // Check if timespm is different from prev_timespm
@@ -557,7 +572,11 @@ void reset_the_min_max_data()
     // strncpy(prev_timespm, timespm, sizeof(prev_timespm) - 1);
     // prev_timespm[sizeof(prev_timespm) - 1] = '\0'; // Ensure null-termination
 }
-
+/**
+ * @brief Update axis min/max/delta values.
+ * @param axis Pointer to AxisMinMax structure.
+ * @param axis_val New axis value to consider.
+ */
 void update_axis_data(AxisMinMax *axis, float axis_val)
 {
     int abs_val = (int)fabs(axis_val);
@@ -570,7 +589,11 @@ void update_axis_data(AxisMinMax *axis, float axis_val)
 
     axis->delta = axis->max - axis->min; // Calculate delta for axis
 }
-
+/**
+ * @brief Update magnitude min/max/delta values.
+ * @param mag Pointer to AxisMinMax structure.
+ * @param magni_val New magnitude value to consider.
+ */
 void update_magnitude_data(AxisMinMax *mag, int magni_val)
 {
     if (magni_val < mag->min)
@@ -581,7 +604,11 @@ void update_magnitude_data(AxisMinMax *mag, int magni_val)
 
     mag->delta = mag->max - mag->min; // Calculate delta for magnitude
 }
-
+/**
+ * @brief Store data in a FIFO log window.
+ * @param window_packet Data packet to store.
+ * @param x_val X-axis value to store.
+ */
 void store_data(char *window_packet, float x_val)
 {
     if (sec_counter < WINDOW_SIZE) // buffer not full yet
@@ -604,7 +631,10 @@ void store_data(char *window_packet, float x_val)
         log_window[WINDOW_SIZE - 1].x_delta = x_val;
     }
 }
-
+/**
+ * @brief Check if axis value crosses threshold.
+ * @param value Axis value to check.
+ */
 bool check_axis(float value, int threshold)
 {
     if (threshold > 0)
@@ -617,63 +647,26 @@ bool check_axis(float value, int threshold)
     }
     return false; // 0 → disabled
 }
-
+/**
+ * @brief Check if value crosses threshold.
+ * @param value Value to check.
+ * @param threshold Threshold to compare against.
+ * @return true if threshold is non-zero and value >= threshold, false otherwise.
+ */
 bool check_threshold(float value, int threshold)
 {
     return (threshold != 0 && value >= threshold);
 }
-
+/**
+ * @brief Check for specific pattern in logged data.
+ * This function checks if the logged data in the window
+ * matches a predefined pattern based on high and low thresholds.
+ * If the pattern is detected, it triggers an alert (e.g., buzzer).
+ */
 void check_pattern(void)
-{
-    // if (sec_counter < WINDOW_SIZE)
-    //     return; // not enough samples yet
-
-    // float high_th = (float)m_device_cfg.test_high_beep_th;
-    // float low_th = (float)m_device_cfg.test_low_beep_th;
-
-    // if ((log_window[5].y_delta <= (float)m_device_cfg.test_low_beep_th && m_device_cfg.test_low_beep_th != 0) &&
-    //     (log_window[4].y_delta <= (float)m_device_cfg.test_low_beep_th && m_device_cfg.test_low_beep_th != 0) &&
-    //     (log_window[3].y_delta <= (float)m_device_cfg.test_low_beep_th && m_device_cfg.test_low_beep_th != 0) &&
-    //     (log_window[2].y_delta <= (float)m_device_cfg.test_low_beep_th && m_device_cfg.test_low_beep_th != 0) &&
-    //     (log_window[1].y_delta >= (float)m_device_cfg.test_high_beep_th && m_device_cfg.test_high_beep_th != 0) &&
-    //     (log_window[0].y_delta >= (float)m_device_cfg.test_high_beep_th && m_device_cfg.test_high_beep_th != 0))
-    // {
-    // if (!pattern_flag)
-    // {
-    // // Send packet
-    // live_alert_update(window_packet);
-    // pattern_flag = true;
-    // nrf_gpio_pin_set(BUZZER_PIN);
-    // printf("Pattern detected! Beep!\n");
-    // }
-    // }
-    // else
-    // {
-    //     if (pattern_flag)
-    //     {
-    //         pattern_flag = false;
-    //         nrf_gpio_pin_clear(BUZZER_PIN);
-    //     }
-    // }
-
+{  
     if (sec_counter < WINDOW_SIZE)
         return; // not enough samples yet
-
-    // float high_th = (float)m_device_cfg.test_high_beep_th;
-    // float low_th = (float)m_device_cfg.test_low_beep_th;
-
-    // float high_th = (float)m_device_cfg.test_high_beep_th;
-    // float low_th = (float)m_device_cfg.test_low_beep_th;
-
-    // // Newest two must be HIGH
-    // bool last2_high = (log_window[0].y_delta >= high_th && high_th != 0) &&
-    //                   (log_window[1].y_delta >= high_th && high_th != 0);
-
-    // // Previous four must be LOW
-    // bool prev4_low = (log_window[2].y_delta <= low_th && low_th != 0) &&
-    //                  (log_window[3].y_delta <= low_th && low_th != 0) &&
-    //                  (log_window[4].y_delta <= low_th && low_th != 0) &&
-    //                  (log_window[5].y_delta <= low_th && low_th != 0);
 
     bool ans = true;
     bool condition = false;
@@ -695,37 +688,6 @@ void check_pattern(void)
             condition = true;
         }
     }
-    // if (last2_high && prev4_low)
-    // if (ans && condition)
-    // if (ans && condition &&
-    //     (accel_y.max <= m_device_cfg.testY_beep_th && m_device_cfg.testY_beep_th != 0 ||
-    //      accel_x.max <= m_device_cfg.testX_beep_th && m_device_cfg.testX_beep_th != 0 ||
-    //      accel_z.max <= m_device_cfg.testZ_beep_th && m_device_cfg.testZ_beep_th != 0))
-
-    // if (ans && condition &&
-    //     (check_axis(accel_x.max, m_device_cfg.testX_beep_th) ||
-    //      check_axis(accel_y.max, m_device_cfg.testY_beep_th) ||
-    //      check_axis(accel_z.max, m_device_cfg.testZ_beep_th) ||
-    //      check_axis(accel_mag.max, m_device_cfg.testA_beep_th)))  // before
-
-    // if (accel_y.max >= m_device_cfg.testY_beep_th && m_device_cfg.testY_beep_th != 0 ||
-    //     (ans && condition &&
-    //      (check_axis(accel_x.max, m_device_cfg.testX_beep_th) ||
-    //       check_axis(accel_y.max, m_device_cfg.testY_beep_th) ||
-    //       check_axis(accel_z.max, m_device_cfg.testZ_beep_th) ||
-    //       check_axis(accel_mag.max, m_device_cfg.testA_beep_th))))
-
-    // if (accel_mag.max >= m_device_cfg.testA_beep_th && m_device_cfg.testA_beep_th != 0 ||
-    //     accel_x.max >= m_device_cfg.testX_beep_th && m_device_cfg.testX_beep_th != 0 ||
-    //     accel_y.max >= m_device_cfg.testY_beep_th && m_device_cfg.testY_beep_th != 0 ||
-    //     accel_z.max >= m_device_cfg.testZ_beep_th && m_device_cfg.testZ_beep_th != 0 ||
-    //     accel_mag.max >= m_device_cfg.testA_beep_th && m_device_cfg.testA_beep_th != 0 &&
-    //         accel_mag.min < m_device_cfg.xyz_avg_lt && m_device_cfg.xyz_avg_lt != 0)
-
-    // if (check_threshold(accel_mag.max, m_device_cfg.testA_beep_th) ||
-    //     check_threshold(accel_x.max, m_device_cfg.testX_beep_th) ||
-    //     check_threshold(accel_y.max, m_device_cfg.testY_beep_th) ||
-    //     check_threshold(accel_z.max, m_device_cfg.testZ_beep_th))
 
     if (ans && condition &&
         (check_threshold(accel_x.max, m_device_cfg.testX_beep_th) ||
@@ -763,14 +725,6 @@ void check_pattern(void)
         live_alert_update(check_packet);
         uart_trasmit_str(check_packet);
     }
-    // else
-    // {
-    //     if (pattern_flag)
-    //     {
-    //         pattern_flag = false;
-    //         nrf_gpio_pin_clear(BUZZER_PIN);
-    //     }
-    // }
 
     // --- Pattern execution only when enabled ---
     if (pattern_flag)
@@ -803,69 +757,9 @@ void check_pattern(void)
         pattern_flag = false;
         nrf_gpio_pin_clear(BUZZER_PIN);
     }
-
-    // else
-    // {
-    //     // Pattern not active → keep buzzer OFF
-    //     nrf_gpio_pin_clear(BUZZER_PIN);
-    //     buzzer_on = false;
-    //     sec_counter = 0;
-    // }
-
-    // if (pattern_flag && accel_x.max >= m_device_cfg.testX_beep_th)
-    // {
-    //     pattern_flag = false;           // disable pattern
-    //     nrf_gpio_pin_clear(BUZZER_PIN); // force buzzer OFF
-    //     buzzer_on = false;
-    //     beep_counter = 0;
-    //     printf("Pattern flag false! Buzzer OFF\n");
-    //     return; // exit early, no more processing this tick
-    // }
-
-    // if (ans && condition &&
-    //     (accel_y.max > m_device_cfg.testY_beep_th && m_device_cfg.testY_beep_th != 0 ||
-    //      accel_x.max > m_device_cfg.testX_beep_th && m_device_cfg.testX_beep_th != 0 ||
-    //      accel_z.max > m_device_cfg.testZ_beep_th && m_device_cfg.testZ_beep_th != 0))
-    // {
-    //     // Send packet
-    //     ymax_ans_cond = true;
-    //     // buzzer_toggle();
-    //     nrf_gpio_pin_set(BUZZER_PIN);
-    //     printf("Pattern detected! Beep...Beep!\n");
-
-    //     char check_packet[256]; // buffer for packet
-    //     memset(check_packet, 0x00, sizeof(check_packet));
-    //     snprintf(check_packet, sizeof(check_packet),
-    //              "{mac:%X%X%X,time:%s,y_deltas:[%.0f,%.0f,%.0f,%.0f,%.0f,%.0f],yM:%d}",
-    //              gap_addr.addr[2], gap_addr.addr[1], gap_addr.addr[0], timespm,
-    //              log_window[5].y_delta,
-    //              log_window[4].y_delta,
-    //              log_window[3].y_delta,
-    //              log_window[2].y_delta,
-    //              log_window[1].y_delta,
-    //              log_window[0].y_delta,
-    //              (int)fabs(accel_y.max));
-    //     live_alert_update(check_packet);
-    //     uart_trasmit_str(check_packet);
-    // }
-    // else
-    // {
-    //     if (ymax_ans_cond)
-    //     {
-    //         // nrf_gpio_pin_set(BUZZER_PIN);
-    //         ymax_ans_cond_cnt++;
-    //         if (ymax_ans_cond_cnt > 10)
-    //         {
-    //             ymax_ans_cond_cnt = 0;
-    //             ymax_ans_cond = false;
-    //             nrf_gpio_pin_clear(BUZZER_PIN);
-    //         }
-    //     }
-    // }
 }
-
 /**
- * @brief Handler for timer events.
+ * @brief 1-second timer handler.
  */
 void timer_1sec_handler(void *p_context)
 {
@@ -2536,7 +2430,9 @@ void timer_acc_handler(void *p_context)
     // led_brightness_control();
     // fade_led();
 }
-
+/**
+ * @brief Handler for motor timer events.
+ */
 void motor_timer_handler()
 {
     if (m_device_cfg.motorclk_flag == 1)
@@ -2594,7 +2490,10 @@ void motor_timer_handler()
     // nrf_gpio_pin_set(BUZZER_PIN); // BUZZER PIN
     // }
 }
-
+/**
+ * @brief Function for initializing the accelerometer.
+ * @return NRF_SUCCESS on successful initialization, otherwise an error code.
+ */
 ret_code_t acc_init(void)
 {
 
@@ -2907,7 +2806,11 @@ ret_code_t acc_init(void)
 
     return err_code;
 }
-
+/**
+ * @brief  Deactivate accelerometer process
+ * Put the accelerometer into idle mode to save power
+ * 
+ */
 void AccIdleProcess(void)
 {
     in_lp_mode = true;
@@ -2956,7 +2859,10 @@ void AccIdleProcess(void)
     // DisableBattLevel();
     nrf_delay_ms(1000);
 }
-
+/**
+ * @brief  Activate accelerometer process
+ * Reactivate the accelerometer from idle mode
+ */
 void AccActiveProcess(void)
 {
     lsm6dsl_int1_route_t int_1_reg;
@@ -2993,8 +2899,10 @@ void AccActiveProcess(void)
     getBattLevel();
 }
 
-/* Read temperature data register */
-/* Read the temperature data from the LSM6DSL sensor
+/**
+ * @brief  Read temperature data
+ * Read temperature data register 
+ * Read the temperature data from the LSM6DSL sensor
  * and convert it to Celsius 
  */
 void temperature_dataread(void)
@@ -3019,7 +2927,10 @@ void temperature_dataread(void)
     // Debug (optional)
     //  printf("Temperature: %.2f °C\n", temperature_celsius);
 }
-
+/**
+ * @brief  Update step count based on accelerometer magnitude
+ * Implements step detection logic with hysteresis
+ */
 static void update_step_count(int acc_magnitude)
 {
     static char alert_buffer[10]; // Adjust size as needed
@@ -3040,7 +2951,12 @@ static void update_step_count(int acc_magnitude)
     }
     // printf("Steps: %d\n", step_count);
 }
-
+/**
+ * @brief  Read gyroscope data
+ * Read gyroscope data register 
+ * Read the gyroscope data from the LSM6DSL sensor
+ * and convert it to mdps 
+ */
 void acc_gyro_data()
 {
     ret_code_t err_code;
@@ -3148,7 +3064,12 @@ void acc_gyro_data()
         //     break;
     }
 }
-
+/**
+ * @brief  Read accelerometer data
+ * Read accelerometer data register 
+ * Read the accelerometer data from the LSM6DSL sensor
+ * and convert it to mg
+ */
 void getAccData(void)
 {
 
@@ -3404,228 +3325,3 @@ void getAccData(void)
 #endif
     }
 }
-
-
-// static bool check_if_second_change(void)
-// {
-//     // Just check, don't update
-//     return (strcmp(timespm, prev_timespm) != 0);
-// }
-
-// void reset_the_min_max_data(void)
-// {
-//     if (check_if_second_change())
-//     {
-//         // Reset min/max values
-//         reset_acc_minmax();
-
-//         // Debug log (optional)
-//         // printf("RESET: Timestamp changed to %s\n", timespm);
-
-//         // Update previous timestamp
-//         strncpy(prev_timespm, timespm, sizeof(prev_timespm) - 1);
-//         prev_timespm[sizeof(prev_timespm) - 1] = '\0'; // Ensure null-termination
-//     }
-// }
-// #define WINDOW_SIZE 5
-// #define MAX_LOG_STR 256 // adjust to your packet size
-// Then, optionally build a packet containing the whole window
-// char window_packet[512];
-// void build_window_packet(char *out_packet, size_t size)
-// {
-//     if (sec_counter < WINDOW_SIZE)
-//     {
-//         // Not enough samples yet
-//         snprintf(out_packet, size, "{status:waiting}");
-//         return;
-//     }
-
-//     snprintf(out_packet, size,
-//              "{mac:%X%X%X,time:%s,y_deltas:[%.0f,%.0f,%.0f,%.0f,%.0f]}",
-//              gap_addr.addr[2], gap_addr.addr[1], gap_addr.addr[0], timespm,
-//              log_window[0].y_delta,
-//              log_window[1].y_delta,
-//              log_window[2].y_delta,
-//              log_window[3].y_delta,
-//              log_window[4].y_delta);
-// }
-// static char log_window[WINDOW_SIZE][MAX_LOG_STR]; // stores 5 logs
-// static uint8_t sec_counter = 0;
-
-// // Store data in a FIFO manner (shift and store)
-// void store_data(char *rotation_packet)
-// {
-//     // If we've already stored 5 records, shift the previous records
-//     if (sec_counter >= WINDOW_SIZE)
-//     {
-//         // Shift all records one position left (FIFO)
-//         for (int i = 0; i < WINDOW_SIZE - 1; i++)
-//         {
-//             strncpy(log_window[i], log_window[i + 1], MAX_LOG_STR);
-//         }
-//         // Store the new packet in the last position
-//         strncpy(log_window[WINDOW_SIZE - 1], rotation_packet, MAX_LOG_STR - 1);
-//         log_window[WINDOW_SIZE - 1][MAX_LOG_STR - 1] = '\0'; // Ensure null terminator
-
-//         // Reset the counter to process the next 5 records
-//         sec_counter = WINDOW_SIZE;
-//     }
-//     else
-//     {
-//         // Just store the record if we're not at the 5th record yet
-//         strncpy(log_window[sec_counter], rotation_packet, MAX_LOG_STR - 1);
-//         log_window[sec_counter][MAX_LOG_STR - 1] = '\0'; // Ensure null terminator
-//         sec_counter++;
-//     }
-// }
-
-// // Print all records in the buffer (for analysis or checking)
-// void print_records()
-// {
-//     for (int i = 0; i < WINDOW_SIZE; i++)
-//     {
-//         printf("Record %d: %s\n", i + 1, log_window[i]);
-//     }
-// }
-
-// // Main logic for handling the packets
-// void handle_packet(char *rotation_packet)
-// {
-//     store_data(rotation_packet);
-
-//     // After 5 records, print them and reset for the next cycle
-//     if (sec_counter >= WINDOW_SIZE)
-//     {
-//         print_records(); // Print all stored records
-
-//         // Optionally, you can add a condition to trigger a beep based on the records
-//         // Example: Check if a certain condition is met for any record
-//         // If the 3rd record meets your criteria and others are below threshold
-//         // trigger a beep
-//         // if (1 /* your condition goes here */) {
-//         //     beep();  // Call beep function
-//         // }
-
-//         // Reset counter to start collecting the next 5 records
-//         sec_counter = 0;
-//     }
-// }
-// void getAccGyroData()
-// {
-//     ret_code_t err_code;
-//     uint8_t data_ready1 = 0;
-
-//     // Read gyroscope data
-//     lsm6dsl_gy_flag_data_ready_get(&dev_ctx, &data_ready1);
-
-//     if (data_ready1)
-//     {
-//         // Read gyroscope field data
-//         memset(data_raw_ge.u8bit, 0x00, 3 * sizeof(int16_t));
-//         err_code = lsm6dsl_angular_rate_raw_get(&dev_ctx, data_raw_ge.i16bit);
-
-//         if (err_code != NRF_SUCCESS) // Or use another appropriate error macro
-//         {
-//             printf("Error reading gyroscope data: %ld\n", err_code);
-//             return;
-//         }
-
-//         // Convert to mdps (millidegrees per second)
-//         GYR_X = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[0]);
-//         GYR_Y = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[1]);
-//         GYR_Z = lsm6dsl_from_fs250dps_to_mdps(data_raw_ge.i16bit[2]);
-
-//         // Convert mdps to degrees per second
-//         // gyroXangle = GYR_X / 1000.0f; // Convert from mdps to dps
-//         // gyroYangle = GYR_Y / 1000.0f;
-//         // gyroZangle = GYR_Z / 1000.0f;
-//     }
-
-//     printf("X:%.2f, Y:%.2f, Z:%.2f\n", GYR_X, GYR_Y, GYR_Z);
-//     // printf("GYRO(mdps) - X:%.2f, Y:%.2f, Z:%2f | GYRO(dps) - X:%3.2f, Y:%3.2f, Z:%3.2f\n",
-//     //        GYR_X, GYR_Y, GYR_Z, gyroXangle, gyroYangle, gyroZangle);
-// }
-
-// // Function to calculate direction angle from accelerometer data
-// float calculate_direction_angle(float acc_x, float acc_y)
-// {
-//     // Calculate angle in radians using arctangent
-//     float angle_rad = atan2(acc_y, acc_x);
-
-//     // Convert to degrees
-//     float angle_deg = angle_rad * 180.0f / M_PI;
-
-//     // Normalize to 0-360 degrees
-//     if (angle_deg < 0)
-//     {
-//         angle_deg += 360.0f;
-//     }
-
-//     return angle_deg;
-// }
-
-// // Function to get cardinal direction based on angle
-// const char *get_cardinal_direction(float angle)
-// {
-//     if (angle >= 337.5f || angle < 22.5f)
-//         return "N";
-//     if (angle >= 22.5f && angle < 67.5f)
-//         return "NE";
-//     if (angle >= 67.5f && angle < 112.5f)
-//         return "E";
-//     if (angle >= 112.5f && angle < 157.5f)
-//         return "SE";
-//     if (angle >= 157.5f && angle < 202.5f)
-//         return "S";
-//     if (angle >= 202.5f && angle < 247.5f)
-//         return "SW";
-//     if (angle >= 247.5f && angle < 292.5f)
-//         return "W";
-//     if (angle >= 292.5f && angle < 337.5f)
-//         return "NW";
-//     return "Unknown";
-// }
-// static bool buzzer_state = false;
-// bool hook_test_ok = false;
-
-// void buzzer_toggle(void)
-// {
-//     buzzer_state = !buzzer_state;
-//     if (buzzer_state)
-//     {
-//         nrf_gpio_pin_set(BUZZER_PIN); // ON
-//         // printf("buzzer on....\n");
-//     }
-//     else
-//     {
-//         nrf_gpio_pin_clear(BUZZER_PIN); // OFF
-//         // printf("buzzer off....\n");
-//     }
-// }
-// // Example usage in your accelerometer processing function
-// void process_direction(float acc_x, float acc_y, float acc_z)
-// {
-//     // Calculate the direction angle
-//     direction_angle = calculate_direction_angle(acc_x, acc_y);
-
-//     // Get cardinal direction
-//     cardinal_direction = get_cardinal_direction(direction_angle);
-
-//     // Optional: Apply smoothing if needed
-//     static float prev_angle = 0.0f;
-//     const float ALPHA = 0.2f; // Smoothing factor (0-1)
-//     direction_angle = prev_angle * (1.0f - ALPHA) + direction_angle * ALPHA;
-//     prev_angle = direction_angle;
-
-//     // Log results
-//     printf("Direction Angle: %d degrees\n", direction_angle);
-//     printf("Cardinal Direction: %s\n", cardinal_direction);
-// }
-
-// void get_uniqueID()
-// {
-//     char unique_id[9];                  // 8 characters + null terminator
-//     srand(time(NULL));                  // Seed the random generator with current time
-//     sprintf(unique_id, "%08X", rand()); // Generate random 8-character hex ID
-//     // printf("%s\n", unique_id);
-// }

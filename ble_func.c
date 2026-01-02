@@ -10,9 +10,6 @@
 
 ble_gap_addr_t gap_addr;
 
-#define APP_BLE_OBSERVER_PRIO 3 /**< Application's BLE observer priority. You shouldn't need to modify this value. */
-#define APP_BLE_CONN_CFG_TAG 1  /**< A tag identifying the SoftDevice BLE configuration. */
-
 #define APP_ADV_INTERVAL 64                                    /**< The advertising interval (in units of 0.625 ms; this value corresponds to 40 ms). */
 #define APP_ADV_DURATION BLE_GAP_ADV_TIMEOUT_GENERAL_UNLIMITED /**< The advertising time-out (in units of seconds). When set to 0, we will never time out. */
 
@@ -44,30 +41,41 @@ ble_gap_addr_t gap_addr;
 #define SEC_PARAM_OOB 0                                /**< Out Of Band data availability. */
 #define SEC_PARAM_MIN_KEY_SIZE 7                       /**< Minimum encryption key size. */
 #define SEC_PARAM_MAX_KEY_SIZE 16                      /**< Maximum encryption key size. */
-bool live_notify = false;
-bool his_notify = false;
-extern configuration_t m_device_cfg;
-bool is_UUID = false;
-bool is_url = false;
-uint8_t device_detect_cnt = 0;
+#define SCAN_INTERVAL 0x00A0 // 100 ms = 160 × 0.625 ms
+#define SCAN_WINDOW 0x00A0   // 100 ms = same as interval for continuous scan
+#define SCAN_DURATION 0      // 0 = scan until explicitly stopped
+#define SCAN_PHY BLE_GAP_PHY_1MBPS
 
+#define MIN_CONNECTION_INTERVAL MSEC_TO_UNITS(7.5, UNIT_1_25_MS) /**< Determines minimum connection interval in milliseconds. */
+#define MAX_CONNECTION_INTERVAL MSEC_TO_UNITS(30, UNIT_1_25_MS)  /**< Determines slave latency in terms of connection events. */
+#define SUPERVISION_TIMEOUT MSEC_TO_UNITS(4000, UNIT_10_MS)      /**< Determines supervision time-out in units of 10 milliseconds. */
+
+#define APP_BLE_CONN_CFG_TAG 1  /**< A tag identifying the SoftDevice BLE configuration. */
+#define APP_BLE_OBSERVER_PRIO 3 /**< Application's BLE observer priority. You shouldn't need to modify this value. */
+
+extern configuration_t m_device_cfg; // Device Configuration
+bool is_UUID = false, is_url = false;
+bool live_notify = false, his_notify = false;
+uint8_t device_detect_cnt = 0, th1[100];
+uint8_t bit0[10], bit1[10], bit2[10];
+uint8_t bit3[10], bit4[10], bit5[10],
+    wt[10], bzt[10], delaytm[10], hm_stp[10];
 BLE_CUS_DATA_DEF(m_data);
 BLE_NUS_DEF(m_nus, NRF_SDH_BLE_TOTAL_LINK_COUNT);
-BLE_CUS_SETTINGS_DEF(m_settings);
-BLE_CTS_C_DEF(m_cts_c);   /**< Current Time service instance. */
-BLE_BAS_DEF(m_bas);       /**< Structure used to identify the battery service. */
-NRF_BLE_GATT_DEF(m_gatt); /**< GATT module instance. */
-// NRF_BLE_QWRS_DEF(m_qwr, NRF_SDH_BLE_TOTAL_LINK_COUNT);                          /**< Context for the Queued Write module.*/
+BLE_CUS_SETTINGS_DEF(m_settings);         /**< Settings for the Custom User Service. */
+BLE_CTS_C_DEF(m_cts_c);                   /**< Current Time service instance. */
+BLE_BAS_DEF(m_bas);                       /**< Structure used to identify the battery service. */
+NRF_BLE_GATT_DEF(m_gatt);                 /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                   /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);       /**< Advertising module instance. */
 BLE_DB_DISCOVERY_DEF(m_ble_db_discovery); /**< DB discovery module instance. */
-NRF_BLE_GQ_DEF(m_ble_gatt_queue,          /**< BLE GATT Queue instance. */
-               NRF_SDH_BLE_PERIPHERAL_LINK_COUNT,
-               NRF_BLE_GQ_QUEUE_SIZE);
+NRF_BLE_SCAN_DEF(m_scan);                 /**< Scan module instance. */
+NRF_BLE_GQ_DEF(m_ble_gatt_queue, NRF_SDH_BLE_PERIPHERAL_LINK_COUNT,
+               NRF_BLE_GQ_QUEUE_SIZE); /**< BLE GATT Queue instance. */
 
 APP_TIMER_DEF(TIMER_HISTORY);
 
-static pm_peer_id_t m_peer_id;
+static pm_peer_id_t m_peer_id;                                           /**< Device reference handle to the current bonded central. */
 static uint16_t m_cur_conn_handle = BLE_CONN_HANDLE_INVALID;             /**< Handle of the current connection. */
 static pm_peer_id_t m_whitelist_peers[BLE_GAP_WHITELIST_ADDR_MAX_COUNT]; /**< List of peers currently in the whitelist. */
 static uint32_t m_whitelist_peer_cnt;                                    /**< Number of peers currently in the whitelist. */
@@ -75,40 +83,14 @@ static uint32_t m_whitelist_peer_cnt;                                    /**< Nu
 static uint8_t m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;           /**< Advertising handle used to identify an advertising set. */
 static uint8_t m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];            /**< Buffer for storing an encoded advertising set. */
 static uint8_t m_enc_scan_response_data[BLE_GAP_ADV_SET_DATA_SIZE_MAX]; /**< Buffer for storing an encoded scan data. */
+static uint8_t m_device_name[20] = DEVICE_NAME;                         /**< Name of device. Will be included in the advertising data. */
+bool gyr_noti_flag = false, conn_flag = false;
 
-static uint8_t m_device_name[20] = DEVICE_NAME;
-bool gyr_noti_flag = false;
-bool conn_flag = false;
-uint8_t th1[100];
-uint8_t bit0[10];
-uint8_t bit1[10];
-uint8_t bit2[10];
-uint8_t bit3[10];
-uint8_t bit4[10];
-uint8_t bit5[10];
-uint8_t wt[10];
-uint8_t bzt[10];
-uint8_t delaytm[10];
-uint8_t hm_stp[10];
 
-#define SCAN_INTERVAL 0x00A0 // 100 ms = 160 × 0.625 ms
-#define SCAN_WINDOW 0x00A0   // 100 ms = same as interval for continuous scan
-#define SCAN_DURATION 0      // 0 = scan until explicitly stopped
-#define SCAN_PHY BLE_GAP_PHY_1MBPS
-
-#define MIN_CONNECTION_INTERVAL MSEC_TO_UNITS(7.5, UNIT_1_25_MS) /**< Determines minimum connection interval in milliseconds. */
-#define MAX_CONNECTION_INTERVAL MSEC_TO_UNITS(30, UNIT_1_25_MS)  /**< Determines maximum connection interval in milliseconds. */
-#define SLAVE_LATENCY 0                                          /**< Determines slave latency in terms of connection events. */
-#define SUPERVISION_TIMEOUT MSEC_TO_UNITS(4000, UNIT_10_MS)      /**< Determines supervision time-out in units of 10 milliseconds. */
-
-#define APP_BLE_CONN_CFG_TAG 1  /**< A tag identifying the SoftDevice BLE configuration. */
-#define APP_BLE_OBSERVER_PRIO 3 /**< Application's BLE observer priority. You shouldn't need to modify this value. */
-
-NRF_BLE_SCAN_DEF(m_scan);                                /**< Scanning module instance. */
+/**< Scanning module instance. */
 static char const m_target_periph_name[] = "KARE-D0B58"; /**< Name of the device we try to connect to. This name is searched in the scan report data*/
 
 bool scan_hook_stats = false;
-
 extern bool self_hook_disconnect;
 extern bool bhd_flag;
 uint16_t both_hook_disconnect = 0;
@@ -147,8 +129,8 @@ static char const *month_of_year[] =
         "December"};
 
 /**
-* @brief Universally unique service identifiers. 
-*/
+ * @brief Universally unique service identifiers.
+ */
 static ble_uuid_t m_adv_uuids[] = /**< Universally unique service identifiers. */
     {
         {BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE},
@@ -498,14 +480,11 @@ void timer_history_handler(void *p_context)
  *
  * @details This function will be called for all Custom Service events which are passed to
  *          the application.
- *
  * @param[in]   p_cus_service  Custom Service structure.
  * @param[in]   p_evt          Event received from the Custom Service.
- *
  */
 
-static void on_cus_data_evt(ble_cus_data_t *p_cus_service,
-                            ble_cus_data_evt_t *p_evt)
+static void on_cus_data_evt(ble_cus_data_t *p_cus_service,ble_cus_data_evt_t *p_evt)
 {
     switch (p_evt->evt_type)
     {
@@ -559,7 +538,6 @@ static void on_cus_data_evt(ble_cus_data_t *p_cus_service,
         break;
     }
 }
-
 /**
  * @brief Function for handling the Custom Service Service events.
  *
@@ -570,8 +548,7 @@ static void on_cus_data_evt(ble_cus_data_t *p_cus_service,
  * @param[in]   p_evt          Event received from the Custom Service.
  *
  */
-static void on_cus_settings_evt(ble_cus_settings_t *p_cus_service,
-                                ble_cus_settings_evt_t *p_evt)
+static void on_cus_settings_evt(ble_cus_settings_t *p_cus_service,ble_cus_settings_evt_t *p_evt)
 {
     switch (p_evt->evt_type)
     {
@@ -645,9 +622,7 @@ static void conn_params_error_handler(uint32_t nrf_error)
  * @details During shutdown procedures, this function will be called at a 1 second interval
  *          untill the function returns true. When the function returns true, it means that the
  *          app is ready to reset to DFU mode.
- *
  * @param[in]   event   Power manager event.
- *
  * @retval  True if shutdown is allowed by this power manager handler, otherwise false.
  */
 static bool app_shutdown_handler(nrf_pwr_mgmt_evt_t event)
@@ -693,10 +668,18 @@ static bool app_shutdown_handler(nrf_pwr_mgmt_evt_t event)
 
 // lint -esym(528, m_app_shutdown_handler)
 /**
- * @brief Register application shutdown handler with priority 0 (highest). 
+ * @brief Register application shutdown handler with priority 0 (highest).
  */
 NRF_PWR_MGMT_HANDLER_REGISTER(app_shutdown_handler, 0);
 
+// lint -esym(552, buttonless_dfu_sdh_state_observer)
+/** @brief SoftDevice state observer.
+ *
+ * @details This function will be called when the SoftDevice changes state.
+ *
+ * @param[in] state     SoftDevice state.
+ * @param[in] p_context Context.
+ */
 static void buttonless_dfu_sdh_state_observer(nrf_sdh_state_evt_t state, void *p_context)
 {
     if (state == NRF_SDH_EVT_STATE_DISABLED)
@@ -716,7 +699,6 @@ NRF_SDH_STATE_OBSERVER(m_buttonless_dfu_state_obs, 0) =
 };
 /**
  * @brief Function for getting the advertising configuration.
- * 
  */
 static void advertising_config_get(ble_adv_modes_config_t *p_config)
 {
@@ -814,24 +796,6 @@ static void scan_evt_handler(scan_evt_t const *p_scan_evt)
         uint8_t *p_data = p_adv->data.p_data;
         uint16_t length = p_adv->data.len;
         bool is_config_mode = false;
-
-        // --- MAC address match ---
-        // Target address: 48:87:2D:9C:DD:F3 (in little-endian in p_adv->peer_addr.addr)
-        // uint8_t target_addr[6] = {0xF3, 0xDD, 0x9C, 0x2D, 0x87, 0x48}; // little-endian
-
-        // bool mac_match = memcmp(p_adv->peer_addr.addr, target_addr, 6) == 0;
-        // if (mac_match)
-        // {
-        //     printf(">> MATCHED DEVICE MAC: ");
-        //     for (int i = 5; i >= 0; i--) // print in big-endian (human-readable)
-        //     {
-        //         printf("%02X", p_adv->peer_addr.addr[i]);
-        //         if (i > 0)
-        //             printf(":");
-        //     }
-        //     printf(" <<\n");
-        // }
-
         // Check device name and manufacturer data
         for (uint8_t i = 0; i < length;)
         {
@@ -854,12 +818,9 @@ static void scan_evt_handler(scan_evt_t const *p_scan_evt)
                 {
                     // for slave
                     is_config_mode = true;
-                    // printf("\nDevice_found successfully: %s\n", name);
-                    // printf("RSSI: %d\n", p_adv->rssi);
-                    // printf("------------------------\n");
+                    // printf("Found target device name: %s\n", name);
                 }
             }
-
             // Check for iBeacon data (config mode)
             if (field_type == BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA)
             {
@@ -867,14 +828,12 @@ static void scan_evt_handler(scan_evt_t const *p_scan_evt)
                 if (buz_en == 0 && m_device_cfg.master_device_flag == 1 || buz_en > 0 && m_device_cfg.master_device_flag == 1)
                     parse_ibeacon_data(&p_data[i + 2], field_length - 1);
             }
-
             if (field_type == BLE_GAP_AD_TYPE_SERVICE_DATA)
             {
                 // for master
                 if (buz_en > 0 && m_device_cfg.master_device_flag == 1)
                     parse_eddystone_url(&p_data[i + 2], field_length - 1);
             }
-
             i += field_length + 1;
         }
 
@@ -916,15 +875,9 @@ static void scan_evt_handler(scan_evt_t const *p_scan_evt)
                     uint8_t master_hcmd_status = m_hookcmd_stats - '0';
                     uint8_t master_hd_status = m_hd_stats - '0';
 
-                    // Print values
-                    // printf("md_hookcmd_stats: %c (%d)\n", m_hookcmd_stats, master_hcmd_status);
-                    // printf("md_hookdisconnect: %c (%d)\n", m_hd_stats, master_hd_status);
-                    // printf("\n");
+                    // printf("Master Hook Command Status: %d\n", master_hcmd_status);
+                    // printf("Master Hook Disconnect Status: %d\n", master_hd_status);
 
-                    // if (master_hd_status == 1)
-                    // {
-                    //     bhd_flag = true;
-                    // }
                     if (master_hd_status == 0)
                     {
                         bhd_flag = false;
@@ -936,78 +889,16 @@ static void scan_evt_handler(scan_evt_t const *p_scan_evt)
                         bhd_flag = true;
                         printf("<<----- Both Hook Disconnect: %d ----->>\n", both_hook_disconnect);
                     }
-
-                    // if(m_device_cfg.slave_device_flag == 1 && bhd_flag && device_status == 1 && self_hook_disconnect == true)
-                    // {
-                    //     bhd_flag = false;
-                    //     printf("<<----- Slave Hook Reconnect ----->>\n");
-                    // }
-
                     if (!scan_hook_stats && master_hcmd_status == 1)
                     {
                         printf("<<-------- hello the status is 1 --------->>\n");
-                        // nrf_gpio_pin_set(MOTOR_PIN2);
                         scan_hook_stats = true;
-                        // bhd_flag = false;
-                        // buz_en = 1;
-                        // buz_hmcmd_ex = true;
-                        // m_device_cfg.hook_mode = 1;
-                        // m_device_cfg.buzzer_onoff_enable = 1;
                     }
-
                     if (scan_hook_stats && master_hcmd_status == 0)
                     {
                         printf("<<-------- hello the status is 0 --------->>\n");
-                        // nrf_gpio_pin_clear(MOTOR_PIN2);
                         scan_hook_stats = false;
-                        // buz_en = 0;
-                        // buz_hmcmd_ex = true;
-                        // m_device_cfg.hook_mode = 0;
-                        // m_device_cfg.buzzer_onoff_enable = 0;
                     }
-
-                    // if (m_device_cfg.slave_device_flag == 1 && masterdevice_status == 0 && self_hook_disconnect == true && !bhd_flag)
-                    // {
-                    //     bhd_flag = true;
-                    //     both_hook_disconnect++;
-                    //     printf("<<----- Master & Slave Both Hook Disconnected: %d ----->>\n", both_hook_disconnect);
-                    // }
-                    // else if (bhd_flag && m_device_cfg.slave_device_flag == 1 && device_status == 1 && self_hook_disconnect == false)
-                    // {
-                    //     bhd_flag = false;
-                    //     printf("<<----- Master & Slave Both Hook Reconnected ----->>\n");
-                    // }
-                    // Extract manufacturer-specific values
-                    // if (field_length >= 6) // Ensure we have enough bytes
-                    // {
-                    //     char status_str[2] = {0};          // Temporary string to store the status
-                    //     status_str[0] = p_data[i + 2 + 2]; // Store the ASCII character
-
-                    //     char battery_str[4] = {0};          // For battery, 3 digits + null
-                    //     battery_str[0] = p_data[i + 2 + 3]; // e.g., '0'
-                    //     battery_str[1] = p_data[i + 2 + 4]; // e.g., '0'
-                    //     battery_str[2] = p_data[i + 2 + 5]; // e.g., '0'
-
-                    //     uint8_t status = atoi(status_str);
-                    //     uint8_t battery = atoi(battery_str);
-
-                    //     printf("Status: %c\n", p_data[i + 2 + 2]); // Print ASCII status
-                    //     printf("Battery: %d%%\n", battery);        // Correctly interpreted integer
-
-                    //     if (!scan_hook_stats && status == 0)
-                    //     {
-                    //         printf("hello the status is 0\n");
-                    //         // nrf_gpio_pin_set(MOTOR_PIN2);
-                    //         scan_hook_stats = true;
-                    //     }
-
-                    //     if (scan_hook_stats && status == 1)
-                    //     {
-                    //         printf("hello the status is 1\n");
-                    //         // nrf_gpio_pin_clear(MOTOR_PIN2);
-                    //         scan_hook_stats = false;
-                    //     }
-                    // }
                     break;
                 }
                 i += field_length + 1;
@@ -1990,29 +1881,29 @@ static void peer_manager_init(void)
 
 /**
  * @brief BLE Stack Initialization
+ * @details Initializes the BLE stack and related components.
  */
 void ble_init(void)
 {
     bool erase_bonds = false;
-    ble_stack_init();
-    gap_params_init();
-    gatt_init();
-    db_discovery_init();
-    advertising_init();
-    services_init();
-    conn_params_init();
-    peer_manager_init();
-
-    advertising_start(erase_bonds);
-
-    scan_init();
+    ble_stack_init();               // Initialize BLE stack
+    gap_params_init();              // Initialize GAP parameters
+    gatt_init();                    // Initialize GATT module
+    db_discovery_init();            // Initialize Database Discovery module
+    advertising_init();             //  Initialize Advertising functionality
+    services_init();                // Initialize services
+    conn_params_init();             // Initialize Connection Parameters module
+    peer_manager_init();            // Initialize Peer Manager
+    advertising_start(erase_bonds); //  Start advertising
+    scan_init();                    // Initialize scanning
     nrf_delay_ms(1000);
-    blescan_start();
+    blescan_start(); // Start scanning
 }
 
 /**
  * @brief Function for performing battery measurement and updating the Battery Level characteristic
  *        in Battery Service.
+ * @param[in] battery_level Battery level value to be updated.
  */
 void battery_level_update(uint8_t battery_level)
 {

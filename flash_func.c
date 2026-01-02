@@ -67,36 +67,36 @@ extern bool restart;
 bool bit1_on = false;
 bool bit2_on = false;
 bool bit3_on = false;
-
 bool buz_hmcmd_ex = false;
 
 /* =========================================================
  * Axis Threshold Flags (Instant Detection)
  * ========================================================= */
-bool xless_flag   = false;   // X-axis less-than threshold crossed
-bool xg_flag      = false;   // X-axis greater-than threshold crossed
+bool xless_flag = false; // X-axis less-than threshold crossed
+bool xg_flag = false;    // X-axis greater-than threshold crossed
 
-bool yl_flag      = false;   // Y-axis less-than threshold crossed
-bool yg_flag      = false;   // Y-axis greater-than threshold crossed
+bool yl_flag = false; // Y-axis less-than threshold crossed
+bool yg_flag = false; // Y-axis greater-than threshold crossed
 
-bool zl_flag      = false;   // Z-axis less-than threshold crossed
-bool zg_flag      = false;   // Z-axis greater-than threshold crossed
+bool zl_flag = false; // Z-axis less-than threshold crossed
+bool zg_flag = false; // Z-axis greater-than threshold crossed
 
-bool avg_lt_flag  = false;   // Average magnitude less-than threshold
-bool avg_gt_flag  = false;   // Average magnitude greater-than threshold
+bool avg_lt_flag = false; // Average magnitude less-than threshold
+bool avg_gt_flag = false; // Average magnitude greater-than threshold
 
-bool rssi_lt_flag = false;   // RSSI less-than threshold crossed
-bool rssi_gt_flag = false;   // RSSI greater-than threshold crossed
+bool rssi_lt_flag = false; // RSSI less-than threshold crossed
+bool rssi_gt_flag = false; // RSSI greater-than threshold crossed
 
 /* =========================================================
  * Hook / Connection Counters (External)
  * ========================================================= */
-extern uint16_t rcc_cnt;
-extern uint16_t rac_cnt;
+extern uint16_t rcc_cnt; // Reconnect Counter
+extern uint16_t rac_cnt; // Re-Advertise Counter
 
-extern uint16_t both_hook_disconnect;
-extern uint16_t hc_cnt;
-extern uint16_t hd_cnt;
+extern uint16_t both_hook_disconnect; // Both Master and Slave Hook Disconnect Counter
+extern bool bhd_flag;                 // Both Hook Disconnect Flag
+extern uint16_t hc_cnt;               // Hook Connect Counter
+extern uint16_t hd_cnt;               // Hook Disconnect Counter
 
 /* =========================================================
  * Threshold State Flags (External – Window/Pattern Logic)
@@ -113,8 +113,8 @@ extern bool z_max;
 extern bool net_min;
 extern bool net_max;
 
-extern bool pattern_flag;
-extern bool ymax_ans_cond;
+extern bool pattern_flag; // Pattern Detection Flag
+extern bool ymax_ans_cond; // Y-axis Maximum Answer Condition Flag
 
 /* =========================================================
  * Time / HM Stop Control
@@ -124,16 +124,16 @@ bool time_written = false;
 APP_TIMER_DEF(TIMER_HMSTOP);
 APP_TIMER_DEF(reset_timer_id);
 
-uint32_t hm_stop_cnt = 0;
+uint32_t hm_stop_cnt = 0;  // HM Stop Counter
 
 /* =========================================================
  * Threshold Data Packet
  * ========================================================= */
-uint8_t threshold_data_packet[250];
+uint8_t threshold_data_packet[250]; // Buffer for Threshold Data Packet
 
-static bool volatile m_fds_initialized;
-
-configuration_t m_device_cfg =
+static bool volatile m_fds_initialized; // FDS Initialization Flag
+/* Array to map FDS events to strings. */
+configuration_t m_device_cfg =   
     {
         .name_prefix = DEVICE_NAME_PREFIX,
         .sensor_name_set = SENSOR_NAME_PREFIX,
@@ -201,7 +201,7 @@ configuration_t m_device_cfg =
         .bhd_val = BHD_VAL,
         .buz_beep_cnt = BUZ_BEEP_CNT,
         .lockth = {0, 0, 0, 0, 0, 0}};
-
+/* Array to map FDS events to strings. */
 static fds_record_t m_cfg_record =
     {
         .file_id = CONFIG_FILE,
@@ -210,13 +210,13 @@ static fds_record_t m_cfg_record =
         /* The length of a record is always expressed in 4-byte units (words). */
         .data.length_words = (sizeof(m_device_cfg) + 3) / sizeof(uint32_t),
 };
-
+/* Array to map FDS events to strings. */
 log_configuration_t m_log_cfg =
     {
         .log_count = 0x0,
         .curr_log = 0x0,
 };
-
+/* Array to map FDS events to strings. */
 static fds_record_t m_log_cfg_record =
     {
         .file_id = LOG_CONFIG_FILE,
@@ -225,13 +225,14 @@ static fds_record_t m_log_cfg_record =
         /* The length of a record is always expressed in 4-byte units (words). */
         .data.length_words = (sizeof(m_log_cfg) + 3) / sizeof(uint32_t),
 };
-
+/* Array to map FDS events to strings. */
 rotation_configuration_t m_cnt_cfg =
     {
         .cl = 0,
         .acl = 0,
         .user_time = time_user,
 };
+/* Array to map FDS events to strings. */
 static fds_record_t m_cnt_cfg_record =
     {
         .file_id = ROTATION_CONFIG_FILE,
@@ -259,7 +260,11 @@ static struct
     bool pending;     //!< Waiting for an fds FDS_EVT_DEL_RECORD event, to delete the next record.
 
 } m_delete_all;
-
+/**
+ * @brief Convert FDS return code to string.
+ * @param ret FDS return code.
+ * @return String representation of the FDS return code.
+ */
 const char *fds_err_str(ret_code_t ret)
 {
     /* Array to map FDS return values to strings. */
@@ -284,7 +289,15 @@ const char *fds_err_str(ret_code_t ret)
 
     return err_str[ret - NRF_ERROR_FDS_ERR_BASE];
 }
-
+/**
+ * @brief FDS event handler.
+ *
+ * @param p_evt Pointer to the FDS event.
+ *
+ * @details This function handles FDS events. It processes events such as initialization,
+ * record writing, updating, and deletion. It also manages the state of the delete_all operation
+ * and triggers a device reboot if necessary after configuration changes.
+ */
 static void fds_evt_handler(fds_evt_t const *p_evt)
 {
     if (p_evt->result == NRF_SUCCESS)
@@ -356,12 +369,14 @@ static void fds_evt_handler(fds_evt_t const *p_evt)
 }
 
 /**
- * @brief   Begin deleting all records, one by one. */
+ * @brief   Begin deleting all records, one by one.
+ *
+ * @details This function initiates the deletion of all records.
+ */
 void delete_all_begin(void)
 {
     m_delete_all.delete_next = true;
 }
-
 /**
  * @brief   Process a delete all command.
  *
@@ -380,9 +395,9 @@ void delete_all_process(void)
         }
     }
 }
-
-/*
- * @brief   Sleep until an event is received.   
+/**
+ * @brief   Sleep until an event is received.
+ *
  */
 static void power_manage(void)
 {
@@ -392,9 +407,10 @@ static void power_manage(void)
     __WFE();
 #endif
 }
-
 /**
- * @brief   Wait for fds to initialize. */
+ * @brief   Wait for fds to initialize.
+ *
+ */
 static void wait_for_fds_ready(void)
 {
     while (!m_fds_initialized)
@@ -402,7 +418,10 @@ static void wait_for_fds_ready(void)
         power_manage();
     }
 }
-
+/**
+ * @brief   Initialize flash data storage (FDS).
+ * @return  NRF_SUCCESS on successful initialization, otherwise an error code.
+ */
 uint32_t flash_init(void)
 {
 
@@ -435,7 +454,9 @@ uint32_t flash_init(void)
 
     return err_code;
 }
-
+/**
+ * @brief   Reset motor control flags and update configuration in flash.
+ */
 void motor_reset()
 {
     ret_code_t err_code;
@@ -459,7 +480,9 @@ void motor_reset()
         }
     }
 }
-
+/**
+ * @brief   Reset device state related to hook mode and buzzer.
+ */
 void reset_device_state(void)
 {
     ret_code_t err_code;
@@ -517,7 +540,16 @@ void reset_device_state(void)
         }
     }
 }
-
+/**
+ * @brief   HM Stop Timer Handler.
+ *
+ * @details This function is called when the HM Stop timer expires. It checks if the hook mode is enabled
+ * and if the HM stop flag is set. If both conditions are met, it increments the HM stop counter. If the
+ * counter reaches the threshold defined in the device configuration, it resets the device state and logs
+ * a message indicating that the HM stop condition has been met.
+ *
+ * @param p_context Pointer to the context (not used in this function).
+ */
 void hmstop_timer_handler(void *p_context)
 {
     if (m_device_cfg.hook_mode == 1 && m_device_cfg.hm_stopflag == 1 || m_device_cfg.slave_device_flag == 1 && m_device_cfg.hm_stopflag == 1 || m_device_cfg.master_device_flag == 1 && m_device_cfg.hm_stopflag == 1)
@@ -533,18 +565,31 @@ void hmstop_timer_handler(void *p_context)
         }
     }
 }
-
+/**
+ * @brief   Device reset timer handler.
+ *
+ * @details This function is called when the reset timer expires. It logs a message indicating that
+ * the device is rebooting and then calls the rebootDevice function to perform the reboot.
+ *
+ * @param p_context Pointer to the context (not used in this function).
+ */
 void reset_timer_handler(void *p_context)
 {
     printf("Rebooting device...\n");
     rebootDevice();
 }
-
+/**
+ * @brief   Schedule a device reset after a delay.
+ */
 void schedule_reset()
 {
     app_timer_start(reset_timer_id, APP_TIMER_TICKS(3000), NULL); // 3s delay
 }
-
+/**
+ * @brief   Initialize device configuration from flash.
+ *
+ * @return  NRF_SUCCESS on successful initialization, otherwise an error code.
+ */
 uint32_t config_init(void)
 {
     ret_code_t err_code;
@@ -757,7 +802,9 @@ uint32_t config_init(void)
     }
     return err_code;
 }
-
+/**
+ * @brief   Parse a UUID string into a byte array.
+ */
 bool parse_uuid_string(const char *uuid_str, uint8_t *uuid_out)
 {
     // Validate length (32 hex chars)
@@ -784,7 +831,9 @@ bool parse_uuid_string(const char *uuid_str, uint8_t *uuid_out)
     }
     return true;
 }
-
+/**
+ * @brief   Set device thresholds based on input string.
+ */
 void setThreshold(uint8_t *threshold)
 {
 
@@ -1304,7 +1353,9 @@ void setThreshold(uint8_t *threshold)
 
     return err_code;
 }
-
+/**
+ * @brief   Process DFU mode command.
+ */
 void dfu_process(void)
 {
     printf("fw mode\n");
@@ -1594,7 +1645,7 @@ void save_cnt_mode(uint16_t a, uint16_t b)
         }
     }
 }
-/*
+/**
  * @brief This function is used to set the time.
  *
  * @details This function sets the time in the device configuration structure
@@ -1698,7 +1749,7 @@ void AddLog(char *log)
     }
 }
 
-/*
+/**
  * @brief This function is used to retrieve a log entry from flash.
  *
  * @param log pointer to the buffer where the log entry will be copied.
@@ -1736,12 +1787,12 @@ uint8_t GetLog(char *log)
     m_log_cfg.curr_log++;
     return (uint8_t)len;
 }
-/*
-    * @brief This function is used to reset the log read pointer.
-    *
-    * @details This function resets the current log index to zero and updates the log configuration
-    * record in flash memory.
-*/
+/**
+ * @brief This function is used to reset the log read pointer.
+ *
+ * @details This function resets the current log index to zero and updates the log configuration
+ * record in flash memory.
+ */
 uint8_t GetLogReset()
 {
     ret_code_t err_code;
@@ -1765,7 +1816,7 @@ uint8_t GetLogReset()
     }
     return NRF_SUCCESS;
 }
-/*
+/**
  * @brief This function is used to clear the log data.
  *
  * @details This function clears the log data by deleting all log records from flash memory
@@ -1797,7 +1848,7 @@ uint8_t ClearLog(void)
     err_code = fds_file_delete(LOG_FILE);
     return NRF_SUCCESS;
 }
-/*
+/**
  * @brief This function is used to set the device name prefix.
  *
  * @param prefix pointer to the device name prefix string.
@@ -1828,7 +1879,7 @@ uint8_t setPrefix(uint8_t *prefix, size_t len)
     }
     return NRF_SUCCESS;
 }
-/*
+/**
  * @brief This function is used to set the sensor prefix.
  *
  * @param sensor_prefix pointer to the sensor prefix string.
@@ -1860,7 +1911,7 @@ uint8_t setsensorPrefix(uint8_t *sensor_prefix, size_t len)
     }
     return NRF_SUCCESS;
 }
-/*
+/**
  * @brief This function is used to set the block serial number.
  *
  * @param serial pointer to the serial number string.
@@ -1890,7 +1941,7 @@ uint8_t setBlockSerial(uint8_t *serial, size_t len)
     }
     return NRF_SUCCESS;
 }
-/*
+/**
  * @brief This function is used to perform a factory reset.
  *
  * @details This function deletes the configuration file from flash memory,
@@ -1904,7 +1955,7 @@ void factoryReset()
 
     err_code = fds_file_delete(CONFIG_FILE);
 }
-/*
+/**
  * @brief This function is used to clear the rotation counter.
  *
  * @details This function clears the rotation counter by resetting the values in the configuration structure
@@ -1935,7 +1986,7 @@ void clear_rotation_counter(void)
     }
 }
 
-/*
+/**
  * @brief This function is used to check the command string and perform the corresponding action.
  *
  * @param cl pointer to the command string.
@@ -1963,10 +2014,14 @@ void cl_check(uint8_t *cl, size_t len)
         set_user_time(str);
     }
 }
-/*
-// Save anticlockwise rotation count
-// b = anticlockwise count
-*/
+/**
+ * @brief This function is used to set the user time.
+ *
+ * @param st pointer to the time string.
+ *
+ * @details This function sets the user time in the rotation configuration structure
+ * and updates the record in flash memory.
+ */
 void set_user_time(char *st)
 {
     uint16_t val = 0;

@@ -6,7 +6,8 @@
 #include "boards.h"
 #include "nrf_log.h"
 
-/**@brief Function for handling the Connect event.
+/**
+ * @brief Function for handling the Connect event.
  *
  * @param[in]   p_cus       Custom Service structure.
  * @param[in]   p_ble_evt   Event received from the BLE stack.
@@ -76,7 +77,8 @@ static void on_connect(ble_cus_data_t * p_cus, ble_evt_t const * p_ble_evt)
     }
 }
 
-/**@brief Function for handling the Disconnect event.
+/**
+ * @brief Function for handling the Disconnect event.
  *
  * @param[in]   p_cus       Custom Service structure.
  * @param[in]   p_ble_evt   Event received from the BLE stack.
@@ -87,7 +89,8 @@ static void on_disconnect(ble_cus_data_t * p_cus, ble_evt_t const * p_ble_evt)
     p_cus->conn_handle = BLE_CONN_HANDLE_INVALID;
 }
 
-/**@brief Function for handling the Write event.
+/**
+ * @brief Function for handling the Write event.
  *
  * @param[in]   p_cus       Custom Service structure.
  * @param[in]   p_ble_evt   Event received from the BLE stack.
@@ -196,7 +199,12 @@ static void on_write(ble_cus_data_t * p_cus, ble_evt_t const * p_ble_evt)
 
 
 }
-
+/**
+ * @brief Function for handling the Application's BLE Stack events.
+ *
+ * @param[in]   p_ble_evt   Event received from the BLE stack.
+ * @param[in]   p_context   Custom Service structure.
+ */
 void ble_cus_data_on_ble_evt( ble_evt_t const * p_ble_evt, void * p_context)
 {
     ble_cus_data_t * p_cus = (ble_cus_data_t *) p_context;
@@ -225,7 +233,12 @@ void ble_cus_data_on_ble_evt( ble_evt_t const * p_ble_evt, void * p_context)
             break;
     }
 }
-
+/**
+ * @brief Function for initializing the Custom Service.
+ * @param[in]   p_cus       Custom Service structure.
+ * @param[in]   p_cus_init  Information needed to initialize the service.
+ * @return      NRF_SUCCESS on success, otherwise an error code.
+ */
 uint32_t ble_cus_data_init(ble_cus_data_t * p_cus, const ble_cus_data_init_t * p_cus_init)
 {
         // this function is for customize data initialization
@@ -348,7 +361,14 @@ uint32_t ble_cus_data_init(ble_cus_data_t * p_cus, const ble_cus_data_init_t * p
 
     /**@snippet [Adding proprietary characteristic to the SoftDevice] */
 }
-
+/**
+ * @brief Function for updating the Custom Value characteristic.
+ * 
+ * @param[in]   p_cus       Custom Service structure.
+ * @param[in]   live_data   New Custom Value characteristic value.
+ *
+ * @return      NRF_SUCCESS on success, otherwise an error code.
+ */
 uint32_t ble_data_live_value_update(ble_cus_data_t * p_cus, uint8_t *live_data)
 {
         // this function update the ble live data value 
@@ -405,7 +425,14 @@ uint32_t ble_data_live_value_update(ble_cus_data_t * p_cus, uint8_t *live_data)
 
     return err_code;
 }
-
+/**
+ * @brief Function for updating the Custom Value characteristic.
+ * 
+ * @param[in]   p_cus           Custom Service structure.
+ * @param[in]   history_value   New Custom Value characteristic value.
+ *
+ * @return      NRF_SUCCESS on success, otherwise an error code.
+ */
 uint32_t ble_data_history_value_update(ble_cus_data_t * p_cus, uint8_t *history_value)
 {
 
@@ -458,7 +485,14 @@ uint32_t ble_data_history_value_update(ble_cus_data_t * p_cus, uint8_t *history_
 
     return err_code;
 }
-
+/**
+ * @brief Function for updating the Custom Value characteristic.
+ * 
+ * @param[in]   p_cus       Custom Service structure.
+ * @param[in]   raw         New Custom Value characteristic value.
+ *
+ * @return      NRF_SUCCESS on success, otherwise an error code.
+ */
 uint32_t ble_data_acc_gya_row_value_update(ble_cus_data_t * p_cus, uint8_t *raw)
 {
     // this function update the ble accelerometer data value
@@ -515,44 +549,3 @@ uint32_t ble_data_acc_gya_row_value_update(ble_cus_data_t * p_cus, uint8_t *raw)
     return err_code;
 }
 
-// uint32_t ble_new_char_value_update(ble_cus_data_t * p_cus, uint8_t *new_value)
-// {
-//     if (p_cus == NULL)
-//     {
-//         return NRF_ERROR_NULL;
-//     }
-
-//     uint32_t err_code;
-//     ble_gatts_value_t gatts_value;
-
-//     // Initialize value struct.
-//     memset(&gatts_value, 0, sizeof(gatts_value));
-
-//     gatts_value.len     = strlen(new_value); // Adjust for actual length
-//     gatts_value.offset  = 0;
-//     gatts_value.p_value = new_value;
-
-//     // Update database.
-//     err_code = sd_ble_gatts_value_set(p_cus->conn_handle, p_cus->new_char_handles.value_handle, &gatts_value);
-//     if (err_code != NRF_SUCCESS)
-//     {
-//         return err_code;
-//     }
-
-//     // Send value if connected and notifying.
-//     if (p_cus->conn_handle != BLE_CONN_HANDLE_INVALID)
-//     {
-//         ble_gatts_hvx_params_t hvx_params;
-//         memset(&hvx_params, 0, sizeof(hvx_params));
-
-//         hvx_params.handle = p_cus->new_char_handles.value_handle;
-//         hvx_params.type   = BLE_GATT_HVX_NOTIFICATION;
-//         hvx_params.offset = 0;
-//         hvx_params.p_len  = &gatts_value.len;
-//         hvx_params.p_data = gatts_value.p_value;
-
-//         err_code = sd_ble_gatts_hvx(p_cus->conn_handle, &hvx_params);
-//     }
-
-//     return err_code;
-// }

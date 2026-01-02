@@ -12,8 +12,8 @@
 extern bool restart;
 extern configuration_t m_device_cfg;
 uint8_t th[60] = "";
-/**@brief Function for handling the Connect event.
- *
+/**
+ * @brief Function for handling the Connect event.
  * @param[in]   p_cus       Custom Service structure.
  * @param[in]   p_ble_evt   Event received from the BLE stack.
  */
@@ -29,8 +29,8 @@ static void on_connect(ble_cus_settings_t *p_cus, ble_evt_t const *p_ble_evt)
     p_cus->evt_handler(p_cus, &evt);
 }
 
-/**@brief Function for handling the Disconnect event.
- *
+/**
+ * @brief Function for handling the Disconnect event.
  * @param[in]   p_cus       Custom Service structure.
  * @param[in]   p_ble_evt   Event received from the BLE stack.
  */
@@ -40,8 +40,8 @@ static void on_disconnect(ble_cus_settings_t *p_cus, ble_evt_t const *p_ble_evt)
     p_cus->conn_handle = BLE_CONN_HANDLE_INVALID;
 }
 
-/**@brief Function for handling the Write event.
- *
+/**
+ * @brief Function for handling the Write event.
  * @param[in]   p_cus       Custom Service structure.
  * @param[in]   p_ble_evt   Event received from the BLE stack.
  */
@@ -135,7 +135,11 @@ static void on_write(ble_cus_settings_t *p_cus, ble_evt_t const *p_ble_evt)
         // Put specific task here.
     }
 }
-
+/**
+ * @brief Function for handling the Read event.
+ * @param[in]   p_cus       Custom Service structure.
+ * @param[in]   p_ble_evt   Event received from the BLE stack.
+ */
 void on_read(ble_cus_settings_t *p_cus, ble_evt_t const *p_ble_evt)
 {
     ble_gatts_evt_read_t *p_evt_read = &p_ble_evt->evt.gatts_evt.params.authorize_request.request.read;
@@ -148,6 +152,12 @@ void on_read(ble_cus_settings_t *p_cus, ble_evt_t const *p_ble_evt)
     }
 }
 
+/**
+ * @brief Function for handling the Application's BLE Stack events.
+ *
+ * @param[in]   p_ble_evt   Event received from the BLE stack.
+ * @param[in]   p_context   Custom Service structure.
+ */
 void ble_cus_settings_on_ble_evt(ble_evt_t const *p_ble_evt, void *p_context)
 {
 
@@ -182,7 +192,12 @@ void ble_cus_settings_on_ble_evt(ble_evt_t const *p_ble_evt, void *p_context)
         break;
     }
 }
-
+/**
+ * @brief Function for initializing the Custom Service.
+ * @param[in]   p_cus       Custom Service structure.
+ * @param[in]   p_cus_init  Information needed to initialize the service.
+ * @return      NRF_SUCCESS on success, otherwise an error code.
+ */
 uint32_t ble_cus_settings_init(ble_cus_settings_t *p_cus, const ble_cus_settings_init_t *p_cus_init)
 {
 
@@ -379,7 +394,14 @@ uint32_t ble_cus_settings_init(ble_cus_settings_t *p_cus, const ble_cus_settings
         return err_code;
     }
 }
-
+/**
+ * @brief Function for updating the Custom Value characteristic.
+ *
+ * @param[in]   p_cus       Custom Service structure.
+ * @param[in]   th          New Custom Value characteristic value.
+ *
+ * @return      NRF_SUCCESS on success, otherwise an error code.
+ */
 uint32_t ble_settingss_th_value_update(ble_cus_settings_t *p_cus, uint8_t *th, size_t len)
 {
     NRF_LOG_INFO("In ble_settingss_th_value_update. \r\n");
